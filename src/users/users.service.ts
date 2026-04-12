@@ -43,7 +43,7 @@ export class UsersService {
  
     const newUser = this.userRepository.create({
       ...userData,
-      isActive: true 
+      isActive: true
     });
 
     return await this.userRepository.save(newUser);

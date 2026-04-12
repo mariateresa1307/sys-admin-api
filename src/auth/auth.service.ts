@@ -47,7 +47,7 @@ export class AuthService {
         action: AuditAction.LOGIN_FAILED,
         ipAddress,
         userAgent,
-        details: 'passwordña inválida',
+        details: 'password invalid',
       });
       throw new UnauthorizedException('Credenciales inválidas');
     }
