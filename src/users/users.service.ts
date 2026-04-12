@@ -39,15 +39,9 @@ export class UsersService {
       throw new ConflictException('El nombre de usuario ya está en uso');
     }
 
-    
-    if (userData.clave) {
-      const salt = await bcrypt.genSalt(10);
-      userData.clave = await bcrypt.hash(userData.clave, salt);
-    }
-
     const newUser = this.userRepository.create({
       ...userData,
-      isActive: true 
+      isActive: true
     });
 
     return await this.userRepository.save(newUser);

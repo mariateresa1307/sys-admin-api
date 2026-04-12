@@ -11,7 +11,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 
-@Controller('user')
+@Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
