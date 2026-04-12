@@ -40,11 +40,7 @@ export class UsersService {
     }
 
     
-    if (userData.clave) {
-      const salt = await bcrypt.genSalt(10);
-      userData.clave = await bcrypt.hash(userData.clave, salt);
-    }
-
+ 
     const newUser = this.userRepository.create({
       ...userData,
       isActive: true 
