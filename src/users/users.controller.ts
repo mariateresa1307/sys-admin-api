@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Request, Put } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -34,6 +34,14 @@ export class UsersController {
   async create(@Body() createUserDto: any) {
     return await this.usersService.createUser(createUserDto);
   }
+
+@Put(':id')
+  async update(@Param('id') id: string, @Body() updateUserDto: any) {
+    console.log('Actualizando usuario:', id, 'con datos:', updateUserDto);
+    return await this.usersService.updateUser(id, updateUserDto); 
+  
+  }
+
 
   @Patch(':id/status')
   async updateStatus(

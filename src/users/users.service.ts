@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Like, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt'; // Asegúrate de tener instalado: npm install bcrypt
@@ -6,6 +6,7 @@ import { User } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {
+  [x: string]: any;
   async findUserById(id: string): Promise<User> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
@@ -96,5 +97,26 @@ export class UsersService {
     return user;
   }
  
+  async updateUser(id: string, data: any) {
+  try {
+    // 1. Buscamos si el usuario existe
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('Usuario no encontrado');
+
+    // 2. IMPORTANTE: Si la clave viene vacía, no la actualizamos
+    if (!data.clave || data.clave.trim() === "") {
+      delete data.clave;
+    } else {
+      // Si usas hashing (bcrypt), aquí deberías encriptar data.clave
+    }
+
+    // 3. Actualizamos solo los campos permitidos
+    Object.assign(user, data);
+    return await this.userRepository.save(user);
+  } catch (error) {
+    console.error("Error en Service updateUser:", error);
+    throw new InternalServerErrorException('Error al actualizar base de datos');
+  }
+}
 
 }
