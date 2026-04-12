@@ -25,12 +25,14 @@ export class SeedService {
     const hashedPassword = await bcrypt.hash('Test123!', 10);
 
     await this.userService.createUser({
-      correo: 'test@example.com',
+      email: 'test@example.com',
       clave: hashedPassword,
       primerNombre: 'Juan',
       segundoNombre: 'Carlos',
       primerApellido: 'Pérez',
       segundoApellido: 'García',
+      username: 'testuser',
+      isActive: true,
     });
 
     console.log('👤 Test user created: test@example.com / Test123!');

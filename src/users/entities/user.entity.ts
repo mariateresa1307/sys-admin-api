@@ -12,7 +12,7 @@ export class User {
   id: string;
 
   @Column({ unique: true })
-  correo: string;
+  email: string;
 
   @Column()
   clave: string;
@@ -34,4 +34,10 @@ export class User {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @Column({ unique: true, nullable: true })
+  username: string;
+
+  @Column({ name: 'is_active', default: true })
+  isActive: boolean;
 }

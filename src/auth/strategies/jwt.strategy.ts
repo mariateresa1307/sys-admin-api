@@ -6,7 +6,7 @@ import { UsersService } from '../../users/users.service';
 
 export interface JwtPayload {
   sub: string;
-  correo: string;
+  email: string;
   primerNombre: string;
   primerApellido: string;
 }
@@ -25,13 +25,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    const user = await this.usersService.findUserById(payload.sub);
+    const user = await this.usersService.getUserById(payload.sub);
     if (!user) {
       throw new UnauthorizedException('Usuario no encontrado');
     }
     return {
       id: user.id,
-      correo: user.correo,
+      email: user.email,
       primerNombre: user.primerNombre,
       primerApellido: user.primerApellido,
     };

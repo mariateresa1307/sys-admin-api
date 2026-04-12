@@ -25,11 +25,11 @@ export class AuthService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<LoginResponseDto> {
-    const user = await this.usersService.findUserByEmail(loginDto.correo.toLowerCase());
+    const user = await this.usersService.findUserByEmail(loginDto.email.toLowerCase());
 
     if (!user) {
       await this.createAuditLog({
-        userEmail: loginDto.correo,
+        userEmail: loginDto.email,
         action: AuditAction.LOGIN_FAILED,
         ipAddress,
         userAgent,
@@ -43,18 +43,18 @@ export class AuthService {
     if (!isPasswordValid) {
       await this.createAuditLog({
         userId: user.id,
-        userEmail: user.correo,
+        userEmail: user.email,
         action: AuditAction.LOGIN_FAILED,
         ipAddress,
         userAgent,
-        details: 'Contraseña inválida',
+        details: 'passwordña inválida',
       });
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
     const payload = {
       sub: user.id,
-      correo: user.correo,
+      email: user.email,
       primerNombre: user.primerNombre,
       primerApellido: user.primerApellido,
     };
@@ -65,7 +65,7 @@ export class AuthService {
 
     await this.createAuditLog({
       userId: user.id,
-      userEmail: user.correo,
+      userEmail: user.email,
       action: AuditAction.LOGIN,
       ipAddress,
       userAgent,
@@ -76,7 +76,7 @@ export class AuthService {
       access_token,
       user: {
         id: user.id,
-        correo: user.correo,
+        email: user.email,
         primerNombre: user.primerNombre,
         segundoNombre: user.segundoNombre,
         primerApellido: user.primerApellido,
