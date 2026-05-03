@@ -1,43 +1,44 @@
 import {
   Entity,
-  PrimaryGeneratedColumn,
+  ObjectIdColumn,
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ObjectId,
 } from 'typeorm';
 
 @Entity('users')
 export class User {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @ObjectIdColumn()
+  id!: ObjectId;
 
   @Column({ unique: true })
-  email: string;
+  email!: string;
 
   @Column()
-  clave: string;
+  clave!: string;
 
   @Column({ name: 'primer_nombre' })
-  primerNombre: string;
+  primerNombre!: string;
 
   @Column({ name: 'segundo_nombre', nullable: true })
   segundoNombre?: string;
 
   @Column({ name: 'primer_apellido' })
-  primerApellido: string;
+  primerApellido!: string;
 
   @Column({ name: 'segundo_apellido', nullable: true })
   segundoApellido?: string;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   @Column({ unique: true, nullable: true })
-  username: string;
+  username?: string;
 
   @Column({ name: 'is_active', default: true })
-  isActive: boolean;
+  isActive: boolean = true;
 }
