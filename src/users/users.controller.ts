@@ -16,10 +16,10 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   async getCurrentUser(@Request() req: any): Promise<UserResponseDto> {
     // Pasamos el id (string) directamente, sin instanciar ObjectId aquí
-    const user = await this.usersService.getUserById(req.user.id);
+    const user = await this.usersService.getUserById(req.user._id);
     
     return {
-      id: user.id.toString(), // Convertimos el ObjectId de la base de datos a string
+      _id: user._id.toString(), // Convertimos el ObjectId de la base de datos a string
       email: user.email,
       primerNombre: user.primerNombre,
       segundoNombre: user.segundoNombre,

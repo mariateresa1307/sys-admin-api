@@ -18,13 +18,9 @@ import { AuditLog } from './auth/entities/audit-log.entity';
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         type: 'mongodb',
-        url: configService.get<string>(
-          'MONGO_URI',
-          'mongodb://localhost:27017/mydb'
-        ),
+        url: configService.get<string>('MONGO_URI'),
         entities: [User, AuditLog],
         synchronize: true, // Mantén en true para desarrollo, ten cuidado en producción
-        useUnifiedTopology: true,
       }),
       inject: [ConfigService],
     }),

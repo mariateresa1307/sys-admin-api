@@ -8,8 +8,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Like, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { ObjectId } from 'mongodb';
 import { User } from './entities/user.entity';
+import { ObjectId } from 'mongodb';
 
 @Injectable()
 export class UsersService {
@@ -21,23 +21,20 @@ export class UsersService {
   ) {}
 
   async findUserById(id: string): Promise<User> {
-    if (!ObjectId.isValid(id)) {
-      throw new BadRequestException('El formato del ID es inválido');
-    }
-    
-    const user = await this.userRepository.findOne({ where: { id: new ObjectId(id) as any } });
+
+    const user = await this.userRepository.findOne({ where: { _id: new ObjectId(id) } });
     if (!user) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
     return user;
   }
-  
+
   async findAll(): Promise<User[]> {
     return await this.userRepository.find({
-      order: { primerNombre: 'ASC' } 
+      order: { primerNombre: 'ASC' }
     });
   }
-  
+
   async findUserByEmail(email: string): Promise<User | null> {
     return await this.userRepository.findOne({ where: { email } });
   }
@@ -96,11 +93,7 @@ export class UsersService {
   }
 
   async getUserById(id: string): Promise<User> {
-    if (!ObjectId.isValid(id)) {
-      throw new BadRequestException('El formato del ID es inválido');
-    }
-
-    const user = await this.userRepository.findOne({ where: { id: new ObjectId(id) as any } });
+    const user = await this.userRepository.findOne({ where: { _id: new ObjectId(id) as any } });
     if (!user) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
@@ -109,12 +102,8 @@ export class UsersService {
  
   async updateUser(id: string, data: any) {
     try {
-      if (!ObjectId.isValid(id)) {
-        throw new BadRequestException('El formato del ID es inválido');
-      }
-
       // 1. Buscamos si el usuario existe usando el ObjectId
-      const user = await this.userRepository.findOne({ where: { id: new ObjectId(id) as any } });
+      const user = await this.userRepository.findOne({ where: { _id: new ObjectId(id) as any } });
       if (!user) throw new NotFoundException('Usuario no encontrado');
 
       // 2. IMPORTANTE: Si la clave viene vacía, no la actualizamos

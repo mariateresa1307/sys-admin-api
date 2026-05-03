@@ -1,12 +1,10 @@
 import {
   Entity,
-  PrimaryGeneratedColumn,
+  ObjectIdColumn,
   Column,
   CreateDateColumn,
-  ManyToOne,
-  JoinColumn,
+  ObjectId,
 } from 'typeorm';
-import { User } from '../../users/entities/user.entity';
 
 export enum AuditAction {
   LOGIN = 'LOGIN',
@@ -16,35 +14,30 @@ export enum AuditAction {
 
 @Entity('audit_logs')
 export class AuditLog {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @ObjectIdColumn()
+  _id: ObjectId;
 
-  @Column({ name: 'user_id', nullable: true })
-  userId?: string;
+  @Column({ type: 'objectId' as any, nullable: false })
+  userId?: ObjectId;
 
-  @ManyToOne(() => User, { eager: false })
-  @JoinColumn({ name: 'user_id' })
-  user?: User;
-
-  @Column({ name: 'user_email', nullable: true })
+  @Column({ nullable: true })
   userEmail?: string;
 
   @Column({
     type: 'enum',
     enum: AuditAction,
-    name: 'action',
   })
   action: AuditAction;
 
-  @Column({ name: 'ip_address', nullable: true })
+  @Column({ nullable: true })
   ipAddress?: string;
 
-  @Column({ name: 'user_agent', type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true })
   userAgent?: string;
 
-  @Column({ name: 'details', type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true })
   details?: string;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn()
   createdAt: Date;
 }

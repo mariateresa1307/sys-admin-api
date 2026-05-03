@@ -10,7 +10,7 @@ import {
 @Entity('users')
 export class User {
   @ObjectIdColumn()
-  id!: ObjectId;
+  _id!: ObjectId;
 
   @Column({ unique: true })
   email!: string;
@@ -18,27 +18,27 @@ export class User {
   @Column()
   clave!: string;
 
-  @Column({ name: 'primer_nombre' })
+  @Column()
   primerNombre!: string;
 
-  @Column({ name: 'segundo_nombre', nullable: true })
+  @Column({ nullable: true })
   segundoNombre?: string;
 
-  @Column({ name: 'primer_apellido' })
+  @Column()
   primerApellido!: string;
 
-  @Column({ name: 'segundo_apellido', nullable: true })
+  @Column({ nullable: true })
   segundoApellido?: string;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn()
   createdAt!: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn()
   updatedAt!: Date;
 
   @Column({ unique: true, nullable: true })
   username?: string;
 
-  @Column({ name: 'is_active', default: true })
+  @Column({ default: true })
   isActive: boolean = true;
 }

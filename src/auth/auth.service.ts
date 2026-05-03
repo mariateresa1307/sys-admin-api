@@ -10,6 +10,7 @@ import { AuditLog, AuditAction } from './entities/audit-log.entity';
 import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { UsersService } from '../users/users.service';
+import { ObjectId } from 'mongodb';
 
 @Injectable()
 export class AuthService {
@@ -42,7 +43,7 @@ export class AuthService {
 
     if (!isPasswordValid) {
       await this.createAuditLog({
-        userId: user.id,
+        userId: user._id,
         userEmail: user.email,
         action: AuditAction.LOGIN_FAILED,
         ipAddress,
@@ -53,7 +54,7 @@ export class AuthService {
     }
 
     const payload = {
-      sub: user.id,
+      sub: user._id,
       email: user.email,
       primerNombre: user.primerNombre,
       primerApellido: user.primerApellido,
@@ -64,7 +65,7 @@ export class AuthService {
     });
 
     await this.createAuditLog({
-      userId: user.id,
+      userId: user._id,
       userEmail: user.email,
       action: AuditAction.LOGIN,
       ipAddress,
@@ -75,7 +76,7 @@ export class AuthService {
     return {
       access_token,
       user: {
-        id: user.id,
+        _id: user._id,
         email: user.email,
         primerNombre: user.primerNombre,
         segundoNombre: user.segundoNombre,
@@ -86,7 +87,7 @@ export class AuthService {
   }
 
   private async createAuditLog(params: {
-    userId?: string;
+    userId?: ObjectId;
     userEmail: string;
     action: AuditAction;
     ipAddress?: string;
