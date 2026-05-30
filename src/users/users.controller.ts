@@ -26,6 +26,7 @@ export class UsersController {
       primerApellido: user.primerApellido,
       segundoApellido: user.segundoApellido,
       username: user.username ?? '',
+      isActive: user.isActive,
     };
   }
 

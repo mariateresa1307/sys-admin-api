@@ -6,5 +6,6 @@ export class UserResponseDto {
   primerApellido: string;
   segundoApellido?: string;
   username: string;
+  isActive:boolean;
   
 }

@@ -66,11 +66,11 @@ export class UsersService {
     }
 
     return await this.userRepository.find({
-      where: [
-        { username: Like(`%${search}%`), isActive: true },
-        { email: Like(`%${search}%`), isActive: true },
-        { primerNombre: Like(`%${search}%`), isActive: true },
-        { primerApellido: Like(`%${search}%`), isActive: true },
+     where: [
+        { username: Like(`%${search}%`) },
+        { email: Like(`%${search}%`) },
+        { primerNombre: Like(`%${search}%`) },
+        { primerApellido: Like(`%${search}%`) },
       ],
       order: { primerNombre: 'ASC' }
     });
@@ -84,7 +84,7 @@ export class UsersService {
 
   async remove(id: string): Promise<void> {
     const user = await this.getUserById(id);
-    user.isActive = false; // Borrado lógico profesional
+    user.isActive = false; 
     await this.userRepository.save(user);
   }
 
@@ -102,18 +102,13 @@ export class UsersService {
  
   async updateUser(id: string, data: any) {
     try {
-      // 1. Buscamos si el usuario existe usando el ObjectId
       const user = await this.userRepository.findOne({ where: { _id: new ObjectId(id) as any } });
       if (!user) throw new NotFoundException('Usuario no encontrado');
 
-      // 2. IMPORTANTE: Si la clave viene vacía, no la actualizamos
       if (!data.clave || data.clave.trim() === "") {
         delete data.clave;
       } else {
-        // Si usas hashing (bcrypt), aquí deberías encriptar data.clave
       }
-
-      // 3. Actualizamos solo los campos permitidos
       Object.assign(user, data);
       return await this.userRepository.save(user);
     } catch (error) {
