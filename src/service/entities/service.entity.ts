@@ -34,10 +34,10 @@ export class Service {
   nodoA?: string;
 
   @Column({ nullable: true })
-  nodoB?: number;
+  nodoB?: string;
 
   @Column({ nullable: true })
-  nodoOLT?: number;
+  nodoOLT?: string;
 
   @Column({ nullable: true })
   diagramaRed?: string;
