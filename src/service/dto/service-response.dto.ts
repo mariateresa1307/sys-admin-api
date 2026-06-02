@@ -1,15 +1,20 @@
 import { ObjectId } from 'mongodb';
 export class ServiceResponseDto {
-  _id!: ObjectId;
-  id_netuno!: string;
-  serial_ont!: string;
-  id_circuito?: string;
-  vlan!: number;
-  nombre_cliente?: string;
+  _id?: string;
+  tipoServicio?: string;
+  name?: string;
+  city?: string;
+  tipo_cliente?: string;
+  idNetuno?: string; 
+  idDOG?: string;
+  id_Circuito?: string;
+  serialONT?: string;
+  nodeA?: string;
+  nodeB?: string;
+  oltnode?: string;
   contrato?: number;
-  nodoA?: string;
-  nodoB?: string;
-  nodoOLT!: string;
+  vlan?: number | string;
+  status?: string;
+  instalado?: boolean | string;
   diagramaRed?: string;
-  status!: string;
 }

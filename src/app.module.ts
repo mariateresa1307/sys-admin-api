@@ -22,7 +22,7 @@ import { Service } from './service/entities/service.entity';
         type: 'mongodb',
         url: configService.get<string>('MONGO_URI'),
         entities: [User, AuditLog, Service],
-        synchronize: true, // Mantén en true para desarrollo, ten cuidado en producción
+        synchronize: true, 
       }),
       inject: [ConfigService],
     }),

@@ -11,21 +11,32 @@ import {
 export class Service {
   @ObjectIdColumn()
   _id!: ObjectId;
+ 
+  
+  @Column()
+  tipoServicio!: string; 
 
-  @Column({ unique: true })
+  @Column()
+  name!: string;
+
+  @Column()
+  city!: string;
+
+  @Column()
+  tipo_cliente!: string;
+
+  @Column({ unique: true, nullable: true })
   id_netuno!: string;
 
-  @Column()
-  serial_ont!: string;
+      @Column({unique: true, nullable: true })
+  id_circuito!: string;
 
-  @Column()
-  id_circuito!:    string;
+  
+  @Column({ nullable: true })
+  serial_ont?: string;
 
   @Column({ nullable: true })
   vlan?: number;
-
-  @Column()
-  nombre_cliente!: string;
 
   @Column({ nullable: true })
   contrato?: number;
@@ -42,12 +53,12 @@ export class Service {
   @Column({ nullable: true })
   diagramaRed?: string;
 
+  @Column({ default: 'Activo' })
+  status?: string;
+
   @CreateDateColumn()
   createdAt!: Date;
 
   @UpdateDateColumn()
   updatedAt!: Date;
-
-  @Column({ default: true })
-  status?: string;
 }
