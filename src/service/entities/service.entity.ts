@@ -5,16 +5,18 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ObjectId,
+  Index,
 } from 'typeorm';
 
 @Entity('service')
 export class Service {
+  
   @ObjectIdColumn()
   _id!: ObjectId;
- 
-  
+
+
   @Column()
-  tipoServicio!: string; 
+  tipoServicio!: string;
 
   @Column()
   name!: string;
@@ -25,21 +27,22 @@ export class Service {
   @Column()
   tipo_cliente!: string;
 
-  @Column({ unique: true, nullable: true })
+
+  @Column({  nullable: true })
   id_netuno!: string;
 
-      @Column({unique: true, nullable: true })
+  @Column({ nullable: true })
   id_circuito!: string;
 
-  
-  @Column({ nullable: true })
-  serial_ont?: string;
 
   @Column({ nullable: true })
-  vlan?: number;
+  serialONT?: string;
 
   @Column({ nullable: true })
-  contrato?: number;
+  vlan?: number | null;
+
+  @Column({ nullable: true })
+  contrato?: number | null;
 
   @Column({ nullable: true })
   nodoA?: string;
@@ -51,10 +54,10 @@ export class Service {
   nodoOLT?: string;
 
   @Column({ nullable: true })
-  diagramaRed?: string;
+  diagramaRed?:  string ;
 
   @Column({ default: 'Activo' })
-  status?: string;
+  status?: string ;
 
   @CreateDateColumn()
   createdAt!: Date;

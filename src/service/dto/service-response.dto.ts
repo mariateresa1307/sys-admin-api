@@ -5,15 +5,16 @@ export class ServiceResponseDto {
   name?: string;
   city?: string;
   tipo_cliente?: string;
-  idNetuno?: string; 
-  idDOG?: string;
-  id_Circuito?: string;
+
+  id_netuno?: string; 
+  id_circuito?: string;
   serialONT?: string;
-  nodeA?: string;
-  nodeB?: string;
-  oltnode?: string;
-  contrato?: number;
-  vlan?: number | string;
+  nodoA?: string;
+  nodoB?: string;
+  nodoOLT?: string;
+
+  contrato?: number | null;
+  vlan?: number | null;
   status?: string;
   instalado?: boolean | string;
   diagramaRed?: string;

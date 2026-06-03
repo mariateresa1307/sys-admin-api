@@ -14,18 +14,18 @@ async findAll(@Query('search') search?: string): Promise<ServiceResponseDto[]> {
   
   return services.map(s => ({
     _id: s._id?.toString(),
-    tipoServicio: s.tipoServicio || 'N/A',
-    name: s.name || 'N/A',
-    city: s.city || 'N/A',
-    tipo_cliente: s.tipo_cliente || 'N/A',
-    idNetuno: s.id_netuno || 'N/A',
-    serialONT: s.serial_ont || 'N/A',
-    id_Circuito: s.id_circuito || 'N/A',
+    tipoServicio: s.tipoServicio ,
+    name: s.name ,
+    city: s.city,
+    tipo_cliente: s.tipo_cliente,
+    id_netuno: s.id_netuno ,
+    serialONT: s.serialONT ,
+    id_circuito: s.id_circuito ,
     vlan: s.vlan,
     contrato: s.contrato,
-    nodeA: s.nodoA,
-    nodeB: s.nodoB,
-    oltnode: s.nodoOLT,
+    nodoA: s.nodoA,
+    nodoB: s.nodoB,
+    nodoOLT: s.nodoOLT,
     diagramaRed: s.diagramaRed,
     status: s.status || 'Activo',
   }));
@@ -33,20 +33,23 @@ async findAll(@Query('search') search?: string): Promise<ServiceResponseDto[]> {
 
 @Post()
 async createService(@Body() dto: ServiceResponseDto) {
-  // Traducimos del DTO a la Entidad
+
   const entityData = {
     tipoServicio: dto.tipoServicio,
     name: dto.name, 
     city: dto.city,
     tipo_cliente: dto.tipo_cliente,
-    id_netuno: dto.idNetuno,
-    serial_ont: dto.serialONT,
-    id_circuito: dto.id_Circuito, 
-    vlan: Number(dto.vlan),
-    contrato: dto.contrato,
-    nodoA: dto.nodeA,
-    nodoB: dto.nodeB,
-    nodoOLT: dto.oltnode,
+
+    id_netuno: dto.id_netuno,
+    id_circuito: dto.id_circuito, 
+
+    nodoA: dto.nodoA,
+    nodoB: dto.nodoB,
+    nodoOLT: dto.nodoOLT,
+
+    serialONT: dto.serialONT,
+    vlan: (dto.vlan !== undefined && dto.vlan !== null ) ? Number(dto.vlan) : null,
+    contrato: (dto.contrato !== undefined && dto.contrato !== null ) ? Number(dto.contrato) : null,
     diagramaRed: dto.diagramaRed,
     status: dto.status,
   };
