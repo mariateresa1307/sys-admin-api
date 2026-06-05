@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, Query } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query , Put} from '@nestjs/common';
 import { ServiceService } from '../service/service.service';
 import { ServiceResponseDto } from './dto/service-response.dto'; 
 import { ObjectId } from 'mongodb';
@@ -12,7 +12,7 @@ export class ServiceController {
   async findAll(@Query('search') search?: string): Promise<ServiceResponseDto[]> {
     const services = await this.serviceService.searchAll(search);
     return services.map(s => ({
-      _id: s._id?.toString(),
+      _id: s._id.toString(),
       tipoServicio: s.tipoServicio,
       name: s.name,
       city: s.city,
@@ -52,6 +52,12 @@ export class ServiceController {
     };
     return await this.serviceService.createService(entityData);
   }
+
+ @Put(':id')
+   async update(@Param('id') id: string, @Body() updateServiceDto: any) {
+    console.log('Actualizando servicio:', id, 'con datos:', updateServiceDto);
+     return await this.serviceService.updateService(id, updateServiceDto);
+   }
 
   
   @Get(':id')
