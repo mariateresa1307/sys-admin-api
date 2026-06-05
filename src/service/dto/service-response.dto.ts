@@ -8,6 +8,7 @@ export class ServiceResponseDto {
 
   id_netuno?: string; 
   id_circuito?: string;
+  idRBS?: string;
   serialONT?: string;
   nodoA?: string;
   nodoB?: string;

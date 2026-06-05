@@ -24,6 +24,10 @@ export class ServiceService implements OnModuleInit {
         { id_circuito: 1 }, 
         { unique: true, partialFilterExpression: { id_circuito: { $exists: true, $ne: null } } }
       );
+      await this.serviceRepository.createCollectionIndex(
+        { idRBS: 1 }, 
+        { unique: true, partialFilterExpression: { idRBS: { $exists: true, $ne: null } } }
+      );
     } catch (error) {
       console.warn("Los índices ya existen o no pudieron crearse, continuando...");
     }
@@ -42,21 +46,24 @@ export class ServiceService implements OnModuleInit {
   }
 
   async createService(serviceData: Partial<Service>): Promise<Service> {
-    try {
-      // Limpieza de datos (evita enviar campos vacíos que disparan conflictos)
-      const cleanData = Object.fromEntries(
-        Object.entries(serviceData).filter(([_, v]) => v !== "" && v !== null && v !== undefined)
-      );
-
-      const newService = this.serviceRepository.create(cleanData);
-      return await this.serviceRepository.save(newService);
-    } catch (error: any) {
-      if (error.code === 11000) {
-        throw new ConflictException('Uno de los identificadores únicos (Circuito o ID Netuno) ya está en uso');
+  try {
+    const cleanData = { ...serviceData };
+    Object.keys(cleanData).forEach(k => {
+      const key = k as keyof Partial<Service>;
+      if ((cleanData[key] as any) === "") {
+        (cleanData as any)[key] = null;
       }
-      throw error;
+    });
+
+    const newService = this.serviceRepository.create(cleanData);
+    return await this.serviceRepository.save(newService);
+  } catch (error: any) {
+    if (error.code === 11000) {
+      throw new ConflictException('Uno de los identificadores únicos (Circuito o ID Netuno) ya está en uso');
     }
+    throw error;
   }
+}
 
   async searchAll(search?: string): Promise<Service[]> {
     if (!search) return this.findAll();

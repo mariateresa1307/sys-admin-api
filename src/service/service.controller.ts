@@ -9,53 +9,50 @@ export class ServiceController {
 
 
 @Get()
-async findAll(@Query('search') search?: string): Promise<ServiceResponseDto[]> {
-  const services = await this.serviceService.searchAll(search);
-  
-  return services.map(s => ({
-    _id: s._id?.toString(),
-    tipoServicio: s.tipoServicio ,
-    name: s.name ,
-    city: s.city,
-    tipo_cliente: s.tipo_cliente,
-    id_netuno: s.id_netuno ,
-    serialONT: s.serialONT ,
-    id_circuito: s.id_circuito ,
-    vlan: s.vlan,
-    contrato: s.contrato,
-    nodoA: s.nodoA,
-    nodoB: s.nodoB,
-    nodoOLT: s.nodoOLT,
-    diagramaRed: s.diagramaRed,
-    status: s.status || 'Activo',
-  }));
-}
+  async findAll(@Query('search') search?: string): Promise<ServiceResponseDto[]> {
+    const services = await this.serviceService.searchAll(search);
+    return services.map(s => ({
+      _id: s._id?.toString(),
+      tipoServicio: s.tipoServicio,
+      name: s.name,
+      city: s.city,
+      tipo_cliente: s.tipo_cliente,
+      idNetuno: s.id_netuno,
+      idRBS: s.idRBS,
+      serialONT: s.serialONT,
+      id_circuito: s.id_circuito,
+      vlan: s.vlan ?? null,
+      contrato: s.contrato ?? null,
+      nodoA: s.nodoA,
+      nodoB: s.nodoB,
+      nodoOLT: s.nodoOLT,
+      diagramaRed: s.diagramaRed,
+      status: s.status || 'Activo',
+    }));
+  }
 
 @Post()
-async createService(@Body() dto: ServiceResponseDto) {
+  async createService(@Body() dto: ServiceResponseDto) {
+    const entityData = {
+      tipoServicio: dto.tipoServicio,
+      name: dto.name, 
+      city: dto.city,
+      tipo_cliente: dto.tipo_cliente,
+      id_netuno: dto.id_netuno,
+      id_circuito: dto.id_circuito, 
+      idRBS: dto.idRBS,
+      nodoA: dto.nodoA,
+      nodoB: dto.nodoB,
+      nodoOLT: dto.nodoOLT,
+      serialONT: dto.serialONT,
+      vlan: (dto.vlan !== undefined && dto.vlan !== null ) ? Number(dto.vlan) : null,
+      contrato: (dto.contrato !== undefined && dto.contrato !== null ) ? Number(dto.contrato) : null,
+      diagramaRed: dto.diagramaRed,
+      status: dto.status || 'Activo',
+    };
+    return await this.serviceService.createService(entityData);
+  }
 
-  const entityData = {
-    tipoServicio: dto.tipoServicio,
-    name: dto.name, 
-    city: dto.city,
-    tipo_cliente: dto.tipo_cliente,
-
-    id_netuno: dto.id_netuno,
-    id_circuito: dto.id_circuito, 
-
-    nodoA: dto.nodoA,
-    nodoB: dto.nodoB,
-    nodoOLT: dto.nodoOLT,
-
-    serialONT: dto.serialONT,
-    vlan: (dto.vlan !== undefined && dto.vlan !== null ) ? Number(dto.vlan) : null,
-    contrato: (dto.contrato !== undefined && dto.contrato !== null ) ? Number(dto.contrato) : null,
-    diagramaRed: dto.diagramaRed,
-    status: dto.status,
-  };
-  
-  return await this.serviceService.createService(entityData);
-}
   
   @Get(':id')
   async findOne(@Param('id') id: string) {

@@ -34,6 +34,8 @@ export class Service {
   @Column({ nullable: true })
   id_circuito!: string;
 
+  @Column({ nullable: true })
+  idRBS?: string;
 
   @Column({ nullable: true })
   serialONT?: string;
