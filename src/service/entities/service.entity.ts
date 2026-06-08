@@ -27,6 +27,8 @@ export class Service {
   @Column()
   tipo_cliente!: string;
 
+@Column({ nullable: true })
+  ipNetuno?: string;
 
   @Column({  nullable: true })
   id_netuno!: string;

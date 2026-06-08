@@ -40,19 +40,19 @@ export class ServiceService implements OnModuleInit {
   }
 
 async updateService(id: string, data: any) {
-  // Eliminamos _id si llega por accidente
+ 
   const { _id, ...updateData } = data;
 
   try {
     const result = await this.serviceRepository.updateOne(
       { _id: new ObjectId(id) },
-      { $set: updateData } // $set evita intentar insertar o duplicar
+      { $set: updateData } 
     );
 
     if (result.matchedCount === 0) throw new NotFoundException('No encontrado');
     return { success: true };
-  } catch (error) {
-    // Si el error es 11000, significa que el id_circuito o id_netuno ya existe
+  } catch (error: any) {
+  
     if (error.code === 11000) {
       throw new ConflictException('El ID ya existe en otro servicio');
     }

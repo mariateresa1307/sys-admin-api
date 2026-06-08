@@ -5,7 +5,7 @@ export class ServiceResponseDto {
   name?: string;
   city?: string;
   tipo_cliente?: string;
-
+  ipNetuno?: string;
   id_netuno?: string; 
   id_circuito?: string;
   idRBS?: string ;
