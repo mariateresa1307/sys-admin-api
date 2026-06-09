@@ -89,7 +89,7 @@ export class AuthService {
   private async createAuditLog(params: {
     userId?: ObjectId;
     userEmail: string;
-    action: AuditAction;
+    action: AuditAction | string;
     ipAddress?: string;
     userAgent?: string;
     details?: string;
