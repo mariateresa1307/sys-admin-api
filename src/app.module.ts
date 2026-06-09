@@ -8,7 +8,9 @@ import { UsersModule } from './users/users.module';
 import { User } from './users/entities/user.entity';
 import { AuditLog } from './auth/entities/audit-log.entity';
 import { ServicesModule } from './service/service.module';
-import { Service } from './service/entities/service.entity'; 
+import { Service } from './service/entities/service.entity';
+import { TicketsModule } from './ticket/ticket.module';
+import { Ticket } from './ticket/entities/ticket.entity';
 
 @Module({
   imports: [
@@ -21,7 +23,7 @@ import { Service } from './service/entities/service.entity';
       useFactory: async (configService: ConfigService) => ({
         type: 'mongodb',
         url: configService.get<string>('MONGO_URI'),
-        entities: [User, AuditLog, Service],
+        entities: [User, AuditLog, Service, Ticket],
         synchronize: true, 
       }),
       inject: [ConfigService],
@@ -29,6 +31,7 @@ import { Service } from './service/entities/service.entity';
     AuthModule,
     UsersModule,
     ServicesModule,
+    TicketsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
