@@ -25,4 +25,8 @@ export class CreateMiscellaneousDto {
   @IsBoolean()
   @IsOptional()
   activo?: boolean;
+
+  @IsString()
+  @IsOptional()
+  tipoIncidencia?: string;
 }

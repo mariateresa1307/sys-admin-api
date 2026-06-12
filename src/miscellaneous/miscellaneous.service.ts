@@ -1,12 +1,15 @@
-// src/miscellaneous/miscellaneous.service.ts
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ObjectId } from 'mongodb';
 import { Miscellaneous } from './entities/miscellaneous.entity';
 import { CreateMiscellaneousDto } from './dto/create-miscellaneous.dto';
 import { UpdateMiscellaneousDto } from './dto/update-miscellaneous.dto';
-
+import { CategoryFilterDto } from './dto/categoryFilter.dto';
 @Injectable()
 export class MiscellaneousService {
   constructor(
@@ -16,20 +19,22 @@ export class MiscellaneousService {
 
   async create(createDto: CreateMiscellaneousDto) {
     const exists = await this.miscellaneousRepository.findOne({
-      where: { 
-        categoria: createDto.categoria, 
-        valor: createDto.valor.toUpperCase() 
-      }
+      where: {
+        categoria: createDto.categoria,
+        valor: createDto.valor.toUpperCase(),
+      },
     });
 
     if (exists) {
-      throw new BadRequestException(`El valor "${createDto.valor}" ya existe en la categoría "${createDto.categoria}"`);
+      throw new BadRequestException(
+        `El valor "${createDto.valor}" ya existe en la categoría "${createDto.categoria}"`,
+      );
     }
 
     // Si tiene padre, validar que exista
     if (createDto.padreId) {
       const padre = await this.miscellaneousRepository.findOne({
-        where: { _id: new ObjectId(createDto.padreId) }
+        where: { _id: new ObjectId(createDto.padreId) },
       });
       if (!padre) {
         throw new BadRequestException('El elemento padre no existe');
@@ -44,24 +49,18 @@ export class MiscellaneousService {
     return await this.miscellaneousRepository.save(newItem);
   }
 
-  async findAll(categoria?: string) {
-    const query: any = {};
-    if (categoria) {
-      query.categoria = categoria;
-    }
-
+  async findAll(filter: CategoryFilterDto) {
     return await this.miscellaneousRepository.find({
-      where: query,
-      order: { 
-        activo: 'DESC',
-        valor: 'ASC' 
+      where: filter,
+      order: {
+        valor: 'ASC',
       },
     });
   }
 
   async findOne(id: string) {
     const item = await this.miscellaneousRepository.findOne({
-      where: { _id: new ObjectId(id) }
+      where: { _id: new ObjectId(id) },
     });
 
     if (!item) {
@@ -76,13 +75,15 @@ export class MiscellaneousService {
 
     if (updateDto.valor && updateDto.valor.toUpperCase() !== item.valor) {
       const exists = await this.miscellaneousRepository.findOne({
-        where: { 
-          categoria: updateDto.categoria || item.categoria, 
-          valor: updateDto.valor.toUpperCase() 
-        }
+        where: {
+          categoria: updateDto.categoria || item.categoria,
+          valor: updateDto.valor.toUpperCase(),
+        },
       });
       if (exists) {
-        throw new BadRequestException(`El valor "${updateDto.valor}" ya existe en esta categoría`);
+        throw new BadRequestException(
+          `El valor "${updateDto.valor}" ya existe en esta categoría`,
+        );
       }
     }
 
@@ -99,13 +100,13 @@ export class MiscellaneousService {
     const item = await this.findOne(id);
     //await this.miscellaneousRepository.update(id, { activo: false });
     if (item.categoria === 'CIUDAD') {
-    await this.miscellaneousRepository.delete({
-      categoria: 'LOCALIDAD',
-      padreId: id
-    });
-  }
-   await this.miscellaneousRepository.delete(id);
-  
+      await this.miscellaneousRepository.delete({
+        categoria: 'LOCALIDAD',
+        padreId: id,
+      });
+    }
+    await this.miscellaneousRepository.delete(id);
+
     return { message: 'Elemento eliminado correctamente' };
   }
 }
