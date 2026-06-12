@@ -1,18 +1,44 @@
-import { IsString, IsOptional, IsNotEmpty } from 'class-validator';
+import { IsString, IsOptional, IsEnum } from 'class-validator';
 
 export class CategoryFilterDto {
   @IsString()
-  @IsNotEmpty()
   @IsOptional()
   categoria?: string;
 
   @IsString()
-  @IsNotEmpty()
-  @IsOptional()
-  tipoIncidencia?: string;
-
-  @IsString()
-  @IsNotEmpty()
   @IsOptional()
   padreId?: string;
+
+  @IsString()
+  @IsOptional()
+  valor?: string;
+
+  @IsString()
+  @IsOptional()
+  descripcion?: string;
+
+  @IsString()
+  @IsOptional()
+  activo?: string;
+
+  // Campos específicos para relaciones jerárquicas
+  @IsString()
+  @IsOptional()
+  categoriaId?: string;        
+
+  @IsString()
+  @IsOptional()
+  subcategoriaId?: string;  
+
+  @IsString()
+  @IsOptional()
+  estadoId?: string;          
+
+  @IsString()
+  @IsOptional()
+  ciudadId?: string;         
+
+  @IsString()
+  @IsOptional()
+  causaId?: string;         
 }

@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MongoRepository } from 'typeorm';
 import { ObjectId } from 'mongodb';
@@ -10,15 +6,19 @@ import { Miscellaneous } from './entities/miscellaneous.entity';
 import { CreateMiscellaneousDto } from './dto/create-miscellaneous.dto';
 import { UpdateMiscellaneousDto } from './dto/update-miscellaneous.dto';
 import { CategoryFilterDto } from './dto/categoryFilter.dto';
+
 @Injectable()
 export class MiscellaneousService {
   constructor(
     @InjectRepository(Miscellaneous)
     private readonly miscellaneousRepository: MongoRepository<Miscellaneous>,
-  ) { }
+  ) {}
 
   async create(createDto: CreateMiscellaneousDto) {
-    let padre;
+    let padreId: string | undefined;
+    let padreNombre: string | undefined;
+
+    // Validar duplicados
     const exists = await this.miscellaneousRepository.findOne({
       where: {
         categoria: createDto.categoria,
@@ -32,19 +32,81 @@ export class MiscellaneousService {
       );
     }
 
-    // Si tiene padre, validar que exista
-    if (createDto.padreId) {
-      padre = await this.miscellaneousRepository.findOne({
-        where: { _id: new ObjectId(createDto.padreId) },
+    // ✅ MAPEO DE RELACIONES JERÁRQUICAS
+    switch (createDto.categoria) {
+      case 'SUBCATEGORIA':
+        if (!createDto.categoriaId) {
+          throw new BadRequestException('Debe proporcionar categoriaId para SUBCATEGORIA');
+        }
+        padreId = createDto.categoriaId;
+        break;
+
+      case 'DETALLE':
+        if (!createDto.subcategoriaId) {
+          throw new BadRequestException('Debe proporcionar subcategoriaId para DETALLE');
+        }
+        padreId = createDto.subcategoriaId;
+        break;
+
+      case 'CIUDAD':
+        if (!createDto.estadoId) {
+          throw new BadRequestException('Debe proporcionar estadoId para CIUDAD');
+        }
+        padreId = createDto.estadoId;
+        break;
+
+      case 'LOCALIDAD':
+        if (!createDto.ciudadId) {
+          throw new BadRequestException('Debe proporcionar ciudadId para LOCALIDAD');
+        }
+        padreId = createDto.ciudadId;
+        break;
+
+      case 'SOLUCION_CASO':
+        if (!createDto.causaId) {
+          throw new BadRequestException('Debe proporcionar causaId para SOLUCION_CASO');
+        }
+        padreId = createDto.causaId;
+        break;
+
+      // Categorías raíz no tienen padre
+      case 'CATEGORIA_RED':
+      case 'ESTADO':
+      case 'CAUSA_RAIZ':
+      case 'TIPO_CLIENTE':
+      case 'GRUPO_DESTINO':
+      case 'PLATAFORMA':
+      case 'SERVICIO':
+      case 'ULTIMA_MILLA':
+      case 'POR_DEFINIR':
+        padreId = undefined;
+        break;
+
+      default:
+        throw new BadRequestException(`Categoría '${createDto.categoria}' no válida`);
+    }
+
+    // Validar que el padre exista si se proporcionó padreId
+    if (padreId) {
+      const padre = await this.miscellaneousRepository.findOne({
+        where: { _id: new ObjectId(padreId) },
       });
+
       if (!padre) {
         throw new BadRequestException('El elemento padre no existe');
       }
+
+      if (!padre.activo) {
+        throw new BadRequestException('No se puede asociar a un elemento padre inactivo');
+      }
+
+      padreNombre = padre.valor;
     }
 
     const newItem = this.miscellaneousRepository.create({
       ...createDto,
-      ...(padre && { padreId: padre._id }),
+      padreId,
+      padreNombre,
       valor: createDto.valor.toUpperCase(),
     });
 
@@ -52,7 +114,8 @@ export class MiscellaneousService {
   }
 
   async findAll(filter: CategoryFilterDto) {
-    const whereQuery = Object.entries(filter).reduce((acc, [key, value]) => {
+    const whereQuery = Object.entries(filter).reduce(
+      (acc, [key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
           acc[key] = value;
         }
@@ -113,13 +176,31 @@ export class MiscellaneousService {
 
   async remove(id: string) {
     const item = await this.findOne(id);
-    //await this.miscellaneousRepository.update(id, { activo: false });
+
+    // Eliminar hijos si es CIUDAD
     if (item.categoria === 'CIUDAD') {
       await this.miscellaneousRepository.delete({
         categoria: 'LOCALIDAD',
         padreId: new ObjectId(id),
       });
     }
+
+    // Eliminar hijos si es SUBCATEGORIA
+    if (item.categoria === 'SUBCATEGORIA') {
+      await this.miscellaneousRepository.delete({
+        categoria: 'DETALLE',
+        padreId: new ObjectId(id),
+      });
+    }
+
+    // Eliminar hijos si es CAUSA_RAIZ
+    if (item.categoria === 'CAUSA_RAIZ') {
+      await this.miscellaneousRepository.delete({
+        categoria: 'SOLUCION_CASO',
+        padreId: new ObjectId(id),
+      });
+    }
+
     await this.miscellaneousRepository.delete(id);
 
     return { message: 'Elemento eliminado correctamente' };

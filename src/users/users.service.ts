@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, NotFoundException} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Like, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -40,7 +34,7 @@ export class UsersService {
     console.log(" [CREATE USER] Datos recibidos:", userData);
 
     try {
-      // Validar que la contraseña exista
+      
       if (!userData.clave || typeof userData.clave !== 'string') {
       throw new BadRequestException('La contraseña es requerida');
     }
@@ -49,7 +43,6 @@ export class UsersService {
       throw new BadRequestException('El primer nombre es requerido');
     }
 
-      console.log("🔍 [CREATE USER] Buscando usuario existente...");
     const existingUser = await this.userRepository.findOne({
       where: {
         $or: [
@@ -60,25 +53,19 @@ export class UsersService {
     });
 
       if (existingUser) {
-        console.log("⚠️ [CREATE USER] Usuario ya existe:", existingUser.email);
+  
         throw new ConflictException('El nombre de usuario o email ya está en uso');
       }
 
       const role = userData.role || 'admin';
-      console.log("[CREATE USER] Role asignado:", role);
 
       const rolesValidos = ['admin', 'operador', 'editor'];
       if (!rolesValidos.includes(role)) {
-        console.log(" [CREATE USER] Role inválido:", role);
+       
         throw new BadRequestException('Rol de usuario no válido');
       }
-
-    
-      console.log(" [CREATE USER] Encriptando contraseña...");
       const hashedPassword = await bcrypt.hash(userData.clave, 10);
-console.log("✅ [CREATE USER] Contraseña encriptada");
-
-      // Crear usuario con tipos correctos
+  
       const newUser = this.userRepository.create({
         primerNombre: userData.primerNombre!,
         primerApellido: userData.primerApellido!,
@@ -156,7 +143,6 @@ console.log("✅ [CREATE USER] Contraseña encriptada");
         delete data.clave;
       } else {
        
-        console.log("🔐 [UPDATE USER] Encriptando nueva contraseña...");
         data.clave = await bcrypt.hash(data.clave, 10);
       }
 
@@ -165,15 +151,14 @@ console.log("✅ [CREATE USER] Contraseña encriptada");
       } else {
         const rolesValidos = ['admin', 'operador', 'editor'];
         if (!rolesValidos.includes(data.role)) {
-          console.log(" [UPDATE USER] Role inválido:", data.role);
           throw new BadRequestException('Rol de usuario no válido');
         }
       }
 
-      console.log(" [UPDATE USER] Actualizando usuario...");
+    
       Object.assign(user, data);
       const updatedUser = await this.userRepository.save(user);
-      console.log(" [UPDATE USER] Usuario actualizado:", updatedUser._id);
+
       
       return updatedUser;
     } catch (error) {

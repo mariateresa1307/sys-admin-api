@@ -21,7 +21,7 @@ export class UsersController {
     const user = await this.usersService.getUserById(req.user._id);
     
     return {
-      _id: user._id.toString(), // Convertimos el ObjectId de la base de datos a string
+      _id: user._id.toString(), 
       email: user.email,
       primerNombre: user.primerNombre,
       segundoNombre: user.segundoNombre,
@@ -35,11 +35,10 @@ export class UsersController {
 
  @Post()
 async create(@Body() createUserDto: CreateUserDto) {
-  console.log("🎯 [CONTROLLER] Creando usuario:", createUserDto);
   
   try {
     const result = await this.usersService.createUser(createUserDto);
-    console.log("✅ [CONTROLLER] Usuario creado:", result);
+
     return {
       message: 'Usuario creado exitosamente',
       user: {
@@ -55,15 +54,12 @@ async create(@Body() createUserDto: CreateUserDto) {
       }
     };
   } catch (error) {
-    console.error("❌ [CONTROLLER] Error al crear usuario:", error);
-  
     throw error;
   }
 }
 
   @Put(':id')
   async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    console.log('Actualizando usuario:', id, 'con datos:', updateUserDto);
     return await this.usersService.updateUser(id, updateUserDto); 
   }
 
