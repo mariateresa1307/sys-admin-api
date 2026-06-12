@@ -13,15 +13,12 @@ import { ObjectId } from 'mongodb';
 
 @Injectable()
 export class UsersService {
-  [x: string]: any;
-
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
   ) {}
 
   async findUserById(id: string): Promise<User> {
-
     const user = await this.userRepository.findOne({ where: { _id: new ObjectId(id) } });
     if (!user) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
@@ -40,24 +37,72 @@ export class UsersService {
   }
 
   async createUser(userData: Partial<User>): Promise<User> {
-    const existingUser = await this.userRepository.findOne({ 
-      where: { username: userData.username } 
-    });
+    console.log(" [CREATE USER] Datos recibidos:", userData);
 
-    if (existingUser) {
-      throw new ConflictException('El nombre de usuario ya está en uso');
+    try {
+      // Validar que la contraseña exista
+      if (!userData.clave || typeof userData.clave !== 'string') {
+      throw new BadRequestException('La contraseña es requerida');
     }
 
-    const newUser = this.userRepository.create({
-      ...userData,
-      isActive: true
+    if (!userData.primerNombre) {
+      throw new BadRequestException('El primer nombre es requerido');
+    }
+
+      console.log("🔍 [CREATE USER] Buscando usuario existente...");
+    const existingUser = await this.userRepository.findOne({
+      where: {
+        $or: [
+          { username: userData.username },
+          { email: userData.email }
+        ]
+      } as any
     });
 
-    return await this.userRepository.save(newUser);
+      if (existingUser) {
+        console.log("⚠️ [CREATE USER] Usuario ya existe:", existingUser.email);
+        throw new ConflictException('El nombre de usuario o email ya está en uso');
+      }
+
+      const role = userData.role || 'admin';
+      console.log("[CREATE USER] Role asignado:", role);
+
+      const rolesValidos = ['admin', 'operador', 'editor'];
+      if (!rolesValidos.includes(role)) {
+        console.log(" [CREATE USER] Role inválido:", role);
+        throw new BadRequestException('Rol de usuario no válido');
+      }
+
+    
+      console.log(" [CREATE USER] Encriptando contraseña...");
+      const hashedPassword = await bcrypt.hash(userData.clave, 10);
+console.log("✅ [CREATE USER] Contraseña encriptada");
+
+      // Crear usuario con tipos correctos
+      const newUser = this.userRepository.create({
+        primerNombre: userData.primerNombre!,
+        primerApellido: userData.primerApellido!,
+        email: userData.email!,
+        username: userData.username!,
+        clave: hashedPassword,
+        role: role,
+        segundoNombre: userData.segundoNombre,
+        segundoApellido: userData.segundoApellido,
+        isActive: true
+      });
+
+      console.log(" [CREATE USER] Guardando usuario...");
+      const savedUser = await this.userRepository.save(newUser);
+      console.log(" [CREATE USER] Usuario creado exitosamente:", savedUser._id);
+      
+      return savedUser;
+    } catch (error) {
+      console.error(" [CREATE USER] Error:", error);
+      throw error;
+    }
   }
 
   async searchAll(search?: string): Promise<User[]> {
-    // Si no hay búsqueda, retorna todos los activos
     if (!search) {
       return await this.userRepository.find({ 
         where: { isActive: true },
@@ -66,7 +111,7 @@ export class UsersService {
     }
 
     return await this.userRepository.find({
-     where: [
+      where: [
         { username: Like(`%${search}%`) },
         { email: Like(`%${search}%`) },
         { primerNombre: Like(`%${search}%`) },
@@ -102,18 +147,46 @@ export class UsersService {
  
   async updateUser(id: string, data: any) {
     try {
+      console.log("📥 [UPDATE USER] Datos recibidos:", data);
+      
       const user = await this.userRepository.findOne({ where: { _id: new ObjectId(id) as any } });
       if (!user) throw new NotFoundException('Usuario no encontrado');
 
       if (!data.clave || data.clave.trim() === "") {
         delete data.clave;
       } else {
+       
+        console.log("🔐 [UPDATE USER] Encriptando nueva contraseña...");
+        data.clave = await bcrypt.hash(data.clave, 10);
       }
+
+      if (!data.role) {
+        data.role = user.role;
+      } else {
+        const rolesValidos = ['admin', 'operador', 'editor'];
+        if (!rolesValidos.includes(data.role)) {
+          console.log(" [UPDATE USER] Role inválido:", data.role);
+          throw new BadRequestException('Rol de usuario no válido');
+        }
+      }
+
+      console.log(" [UPDATE USER] Actualizando usuario...");
       Object.assign(user, data);
-      return await this.userRepository.save(user);
+      const updatedUser = await this.userRepository.save(user);
+      console.log(" [UPDATE USER] Usuario actualizado:", updatedUser._id);
+      
+      return updatedUser;
     } catch (error) {
-      console.error("Error en Service updateUser:", error);
+      console.error(" [UPDATE USER] Error:", error);
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException('Error al actualizar base de datos');
     }
+  }
+
+  async getUserRole(id: string): Promise<string> {
+    const user = await this.getUserById(id);
+    return user.role;
   }
 }

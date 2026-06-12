@@ -39,6 +39,9 @@ export class User {
   @Column({ unique: true, nullable: true })
   username?: string;
 
+  @Column({ default: 'admin' })
+  role: string = 'admin';
+
   @Column({ default: true })
   isActive: boolean = true;
 }

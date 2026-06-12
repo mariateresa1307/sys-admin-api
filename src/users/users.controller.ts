@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Put } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UserResponseDto } from './dto/user-response.dto';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('user')
@@ -15,7 +17,7 @@ export class UsersController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async getCurrentUser(@Request() req: any): Promise<UserResponseDto> {
-    // Pasamos el id (string) directamente, sin instanciar ObjectId aquí
+
     const user = await this.usersService.getUserById(req.user._id);
     
     return {
@@ -26,17 +28,41 @@ export class UsersController {
       primerApellido: user.primerApellido,
       segundoApellido: user.segundoApellido,
       username: user.username ?? '',
+      role: user.role ?? 'user',
       isActive: user.isActive,
     };
   }
 
-  @Post()
-  async create(@Body() createUserDto: any) {
-    return await this.usersService.createUser(createUserDto);
+ @Post()
+async create(@Body() createUserDto: CreateUserDto) {
+  console.log("🎯 [CONTROLLER] Creando usuario:", createUserDto);
+  
+  try {
+    const result = await this.usersService.createUser(createUserDto);
+    console.log("✅ [CONTROLLER] Usuario creado:", result);
+    return {
+      message: 'Usuario creado exitosamente',
+      user: {
+        _id: result._id.toString(),
+        email: result.email,
+        primerNombre: result.primerNombre,
+        segundoNombre: result.segundoNombre,
+        primerApellido: result.primerApellido,
+        segundoApellido: result.segundoApellido,
+        username: result.username,
+        role: result.role,
+        isActive: result.isActive,
+      }
+    };
+  } catch (error) {
+    console.error("❌ [CONTROLLER] Error al crear usuario:", error);
+  
+    throw error;
   }
+}
 
   @Put(':id')
-  async update(@Param('id') id: string, @Body() updateUserDto: any) {
+  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     console.log('Actualizando usuario:', id, 'con datos:', updateUserDto);
     return await this.usersService.updateUser(id, updateUserDto); 
   }

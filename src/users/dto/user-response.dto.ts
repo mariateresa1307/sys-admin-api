@@ -1,11 +1,12 @@
 export class UserResponseDto {
-  _id: string;
-  email: string;
-  primerNombre: string;
+  _id!: string;
+  email?: string;
+  primerNombre?: string;
   segundoNombre?: string;
-  primerApellido: string;
+  primerApellido?: string;
   segundoApellido?: string;
-  username: string;
-  isActive:boolean;
+  username?: string;
+  role?: string;
+  isActive!:boolean;
   
 }
