@@ -9,6 +9,7 @@ async function bootstrap() {
       whitelist: true,
       transform: true,
       forbidNonWhitelisted: true,
+      skipMissingProperties: true,
     }),
   );
 

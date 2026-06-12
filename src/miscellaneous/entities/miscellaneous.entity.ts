@@ -22,9 +22,8 @@ export class Miscellaneous {
   @Column({ nullable: true })
   descripcion?: string;
 
- 
-  @Column({ nullable: true })
-  padreId?: string;
+  @Column({ nullable: true, type: 'string' })
+  padreId?: ObjectId;
 
   @Column({ nullable: true })
   padreNombre?: string;

@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { MongoRepository } from 'typeorm';
 import { ObjectId } from 'mongodb';
 import { Miscellaneous } from './entities/miscellaneous.entity';
 import { CreateMiscellaneousDto } from './dto/create-miscellaneous.dto';
@@ -14,10 +14,11 @@ import { CategoryFilterDto } from './dto/categoryFilter.dto';
 export class MiscellaneousService {
   constructor(
     @InjectRepository(Miscellaneous)
-    private readonly miscellaneousRepository: Repository<Miscellaneous>,
-  ) {}
+    private readonly miscellaneousRepository: MongoRepository<Miscellaneous>,
+  ) { }
 
   async create(createDto: CreateMiscellaneousDto) {
+    let padre;
     const exists = await this.miscellaneousRepository.findOne({
       where: {
         categoria: createDto.categoria,
@@ -27,13 +28,13 @@ export class MiscellaneousService {
 
     if (exists) {
       throw new BadRequestException(
-        `El valor "${createDto.valor}" ya existe en la categoría "${createDto.categoria}"`,
+        `El valor '${createDto.valor}' ya existe en la categoría '${createDto.categoria}'`,
       );
     }
 
     // Si tiene padre, validar que exista
     if (createDto.padreId) {
-      const padre = await this.miscellaneousRepository.findOne({
+      padre = await this.miscellaneousRepository.findOne({
         where: { _id: new ObjectId(createDto.padreId) },
       });
       if (!padre) {
@@ -43,6 +44,7 @@ export class MiscellaneousService {
 
     const newItem = this.miscellaneousRepository.create({
       ...createDto,
+      ...(padre && { padreId: padre._id }),
       valor: createDto.valor.toUpperCase(),
     });
 
@@ -50,8 +52,21 @@ export class MiscellaneousService {
   }
 
   async findAll(filter: CategoryFilterDto) {
+    const whereQuery = Object.entries(filter).reduce((acc, [key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          acc[key] = value;
+        }
+        return acc;
+      },
+      {} as Record<string, any>,
+    );
+
+    if (filter.padreId) {
+      whereQuery.padreId = new ObjectId(whereQuery.padreId);
+    }
+
     return await this.miscellaneousRepository.find({
-      where: filter,
+      where: whereQuery,
       order: {
         valor: 'ASC',
       },
@@ -82,7 +97,7 @@ export class MiscellaneousService {
       });
       if (exists) {
         throw new BadRequestException(
-          `El valor "${updateDto.valor}" ya existe en esta categoría`,
+          `El valor '${updateDto.valor}' ya existe en esta categoría`,
         );
       }
     }
@@ -102,7 +117,7 @@ export class MiscellaneousService {
     if (item.categoria === 'CIUDAD') {
       await this.miscellaneousRepository.delete({
         categoria: 'LOCALIDAD',
-        padreId: id,
+        padreId: new ObjectId(id),
       });
     }
     await this.miscellaneousRepository.delete(id);

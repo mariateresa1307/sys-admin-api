@@ -9,5 +9,10 @@ export class CategoryFilterDto {
   @IsString()
   @IsNotEmpty()
   @IsOptional()
-  tipoIncidencia!: string;
+  tipoIncidencia?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  padreId?: string;
 }
