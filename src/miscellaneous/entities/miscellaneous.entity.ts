@@ -5,7 +5,6 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ObjectId,
-
 } from 'typeorm';
 
 @Entity('miscellaneous')
@@ -29,7 +28,7 @@ export class Miscellaneous {
   padreNombre?: string;
 
   @Column({ nullable: true })
-tipoIncidencia?: string[];
+  tipoIncidencia?: string[];
 
   @Column({ default: true })
   activo!: boolean;

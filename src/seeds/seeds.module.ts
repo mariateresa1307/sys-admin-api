@@ -4,8 +4,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../users/entities/user.entity';
 import { AuditLog } from '../auth/entities/audit-log.entity';
 import { UsersModule } from '../users/users.module';
-import { UsersService } from '../users/users.service';
 import { SeedService } from './seed.service';
+import { MiscellaneousModule } from 'src/miscellaneous/miscellaneous.module';
+import { Miscellaneous } from 'src/miscellaneous/entities/miscellaneous.entity';
 
 @Module({
   imports: [
@@ -15,17 +16,18 @@ import { SeedService } from './seed.service';
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService) => ({
         type: 'mongodb',
         url: configService.get<string>('MONGO_URI'),
-        entities: [User, AuditLog],
+        entities: [User, AuditLog, Miscellaneous],
         synchronize: configService.get<boolean>('DB_SYNCHRONIZE', true),
         logging: configService.get<boolean>('DB_LOGGING', false),
       }),
       inject: [ConfigService],
     }),
     UsersModule,
+    MiscellaneousModule,
   ],
-  providers: [UsersService, SeedService],
+  providers: [SeedService],
 })
 export class SeedsModule {}
