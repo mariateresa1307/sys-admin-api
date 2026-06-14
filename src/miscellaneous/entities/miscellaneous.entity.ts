@@ -1,4 +1,3 @@
-// src/miscellaneous/entities/miscellaneous.entity.ts
 import {
   Entity,
   ObjectIdColumn,
@@ -28,6 +27,9 @@ export class Miscellaneous {
   @Column({ nullable: true })
   padreNombre?: string;
 
+  @Column({ nullable: true })
+  tipoIncidencia?: string;
+
   @Column({ default: true })
   activo!: boolean;
 
@@ -36,7 +38,4 @@ export class Miscellaneous {
 
   @UpdateDateColumn()
   updatedAt!: Date;
-
-  @Column({ nullable: true })
-  tipoIncidencia?: string;
 }

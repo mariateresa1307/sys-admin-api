@@ -19,7 +19,7 @@ export class MiscellaneousController {
 
   @Post()
   create(@Body() createDto: CreateMiscellaneousDto) {
-    console.log('Datos recibidos:', createDto);
+    console.log('📥 [CONTROLLER] Datos recibidos:', createDto);
     return this.miscellaneousService.create(createDto);
   }
 
