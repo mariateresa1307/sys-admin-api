@@ -28,7 +28,11 @@ export class CategoryFilterDto {
 
   @IsString()
   @IsOptional()
-  subcategoriaId?: string;  
+  subcategoriaId?: string; 
+  
+  @IsString()
+  @IsOptional()
+  tipoIncidencia?: string;
 
   @IsString()
   @IsOptional()
