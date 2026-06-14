@@ -35,37 +35,22 @@ export class MiscellaneousService {
     // ✅ MAPEO DE RELACIONES JERÁRQUICAS
     switch (createDto.categoria) {
       case 'SUBCATEGORIA':
-        if (!createDto.categoriaId) {
-          throw new BadRequestException('Debe proporcionar categoriaId para SUBCATEGORIA');
-        }
         padreId = createDto.categoriaId;
         break;
 
       case 'DETALLE':
-        if (!createDto.subcategoriaId) {
-          throw new BadRequestException('Debe proporcionar subcategoriaId para DETALLE');
-        }
         padreId = createDto.subcategoriaId;
         break;
 
       case 'CIUDAD':
-        if (!createDto.estadoId) {
-          throw new BadRequestException('Debe proporcionar estadoId para CIUDAD');
-        }
         padreId = createDto.estadoId;
         break;
 
       case 'LOCALIDAD':
-        if (!createDto.ciudadId) {
-          throw new BadRequestException('Debe proporcionar ciudadId para LOCALIDAD');
-        }
         padreId = createDto.ciudadId;
         break;
 
       case 'SOLUCION_CASO':
-        if (!createDto.causaId) {
-          throw new BadRequestException('Debe proporcionar causaId para SOLUCION_CASO');
-        }
         padreId = createDto.causaId;
         break;
 
@@ -87,8 +72,9 @@ export class MiscellaneousService {
     }
 
     // Validar que el padre exista si se proporcionó padreId
+    let padre;
     if (padreId) {
-      const padre = await this.miscellaneousRepository.findOne({
+      padre = await this.miscellaneousRepository.findOne({
         where: { _id: new ObjectId(padreId) },
       });
 
@@ -99,14 +85,11 @@ export class MiscellaneousService {
       if (!padre.activo) {
         throw new BadRequestException('No se puede asociar a un elemento padre inactivo');
       }
-
-      padreNombre = padre.valor;
     }
 
     const newItem = this.miscellaneousRepository.create({
       ...createDto,
-      padreId,
-      padreNombre,
+      padreId: padre?._id,
       valor: createDto.valor.toUpperCase(),
     });
 

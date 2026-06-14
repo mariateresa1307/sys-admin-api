@@ -36,4 +36,7 @@ export class Miscellaneous {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @Column({ nullable: true })
+  tipoIncidencia?: string;
 }
