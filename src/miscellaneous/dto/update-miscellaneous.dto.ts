@@ -1,5 +1,5 @@
 // src/miscellaneous/dto/update-miscellaneous.dto.ts
-import { IsString, IsOptional, IsBoolean, IsNumber, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber, IsArray, Min, Max } from 'class-validator';
 
 export class UpdateMiscellaneousDto {
   @IsString()
@@ -14,11 +14,12 @@ export class UpdateMiscellaneousDto {
   @IsOptional()
   descripcion?: string;
 
-  @IsString()
+  @IsArray()
   @IsOptional()
-  tipoIncidencia?: string;
+  @IsString({ each: true })
+  tipoIncidencia?: string[];
 
-  // --- RELACIONES JERÁRQUICAS ---
+
   @IsString() @IsOptional() categoriaId?: string;
   @IsString() @IsOptional() subcategoriaId?: string;
   @IsString() @IsOptional() estadoId?: string;

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsNotEmpty, IsNumber, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNotEmpty, IsNumber, IsArray, Min, Max } from 'class-validator';
 
 export class CreateMiscellaneousDto {
   @IsString()
@@ -13,11 +13,12 @@ export class CreateMiscellaneousDto {
   @IsOptional()
   descripcion?: string;
 
-  @IsString()
+  @IsArray()
   @IsOptional()
-  tipoIncidencia?: string;
+  @IsString({ each: true })
+  tipoIncidencia?: string[];
 
-   @IsString()
+  @IsString()
   @IsOptional()
   padreId?: string;
 
@@ -25,7 +26,6 @@ export class CreateMiscellaneousDto {
   @IsOptional()
   padreNombre?: string;
 
-  // --- RELACIONES JERÁRQUICAS ESPECÍFICAS ---
   @IsString() @IsOptional() categoriaId?: string;    
   @IsString() @IsOptional() subcategoriaId?: string;   
   @IsString() @IsOptional() estadoId?: string;        
