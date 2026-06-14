@@ -30,7 +30,12 @@ export class CreateMiscellaneousDto {
   @IsString() @IsOptional() subcategoriaId?: string;   
   @IsString() @IsOptional() estadoId?: string;        
   @IsString() @IsOptional() ciudadId?: string;        
-  @IsString() @IsOptional() causaId?: string;       
+  @IsString() @IsOptional() causaId?: string;
+  
+  
+  @IsString()
+  @IsOptional()
+  nivelSeveridad?: string;
 
   @IsNumber()
   @IsOptional()

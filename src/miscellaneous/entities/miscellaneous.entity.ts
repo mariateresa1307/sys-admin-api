@@ -30,6 +30,9 @@ export class Miscellaneous {
   @Column({ nullable: true })
   tipoIncidencia?: string[];
 
+@Column({ nullable: true })
+nivelSeveridad?: string;
+
   @Column({ default: true })
   activo!: boolean;
 
