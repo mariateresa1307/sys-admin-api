@@ -18,21 +18,6 @@ export class MiscellaneousService {
     let padreId: string | undefined;
     let padreNombre: string | undefined;
 
-    //  Validar duplicados SOLO por valor (no por tipoIncidencia)
-    const exists = await this.miscellaneousRepository.findOne({
-      where: {
-        categoria: createDto.categoria,
-        valor: createDto.valor.toUpperCase(),
-      },
-    });
-
-    if (exists) {
-      throw new BadRequestException(
-        `El valor '${createDto.valor}' ya existe en la categoría '${createDto.categoria}'`,
-      );
-    }
-
-    // ✅ MAPEO DE RELACIONES JERÁRQUICAS
     switch (createDto.categoria) {
       case 'SUBCATEGORIA':
         if (!createDto.categoriaId) {
@@ -69,11 +54,18 @@ export class MiscellaneousService {
         padreId = createDto.causaId;
         break;
 
-      // Categorías raíz no tienen padre
+      
+      case 'TIPO_CLIENTE':
+        
+        if (!createDto.nivelSeveridad) {
+          throw new BadRequestException('Debe proporcionar nivelSeveridad para TIPO_CLIENTE');
+        }
+        padreId = undefined; 
+        break;
+
       case 'CATEGORIA_RED':
       case 'ESTADO':
       case 'CAUSA_RAIZ':
-      case 'TIPO_CLIENTE':
       case 'GRUPO_DESTINO':
       case 'PLATAFORMA':
       case 'SERVICIO':
@@ -86,7 +78,54 @@ export class MiscellaneousService {
         throw new BadRequestException(`Categoría '${createDto.categoria}' no válida`);
     }
 
-    // Validar que el padre exista si se proporcionó padreId
+
+    const whereQuery: any = {
+      categoria: createDto.categoria,
+      valor: createDto.valor.toUpperCase(),
+    };
+
+    if (createDto.categoria === 'TIPO_CLIENTE' && createDto.nivelSeveridad) {
+      whereQuery.nivelSeveridad = createDto.nivelSeveridad;
+    }
+
+    if (padreId) {
+      whereQuery.padreId = new ObjectId(padreId);
+    }
+
+    const exists = await this.miscellaneousRepository.findOne({ where: whereQuery });
+
+    if (exists) {
+      if (createDto.categoria === 'SOLUCION_CASO') {
+        throw new BadRequestException(
+          `La solución '${createDto.valor}' ya está asociada a esta causa raíz`,
+        );
+      } else if (createDto.categoria === 'LOCALIDAD') {
+        throw new BadRequestException(
+          `La localidad '${createDto.valor}' ya está asociada a esta ciudad`,
+        );
+      } else if (createDto.categoria === 'CIUDAD') {
+        throw new BadRequestException(
+          `La ciudad '${createDto.valor}' ya está asociada a este estado`,
+        );
+      } else if (createDto.categoria === 'SUBCATEGORIA') {
+        throw new BadRequestException(
+          `La subcategoría '${createDto.valor}' ya está asociada a esta categoría`,
+        );
+      } else if (createDto.categoria === 'DETALLE') {
+        throw new BadRequestException(
+          `El detalle '${createDto.valor}' ya está asociado a esta subcategoría`,
+        );
+      } else if (createDto.categoria === 'TIPO_CLIENTE') {
+        throw new BadRequestException(
+          `El tipo de cliente '${createDto.valor}' con nivel de severidad '${createDto.nivelSeveridad}' ya existe`,
+        );
+      } else {
+        throw new BadRequestException(
+          `El valor '${createDto.valor}' ya existe en la categoría '${createDto.categoria}'`,
+        );
+      }
+    }
+
     if (padreId) {
       const padre = await this.miscellaneousRepository.findOne({
         where: { _id: new ObjectId(padreId) },
@@ -103,7 +142,6 @@ export class MiscellaneousService {
       padreNombre = padre.valor;
     }
 
-    // ✅ Asegurar que tipoIncidencia sea array
     const tipoIncidenciaArray = createDto.tipoIncidencia 
       ? (Array.isArray(createDto.tipoIncidencia) ? createDto.tipoIncidencia : [createDto.tipoIncidencia])
       : [];
@@ -113,7 +151,7 @@ export class MiscellaneousService {
       padreId,
       padreNombre,
       valor: createDto.valor.toUpperCase(),
-      tipoIncidencia: tipoIncidenciaArray, // ✅ Guardar como array
+      tipoIncidencia: tipoIncidenciaArray,
     });
 
     return await this.miscellaneousRepository.save(newItem);
@@ -157,24 +195,101 @@ export class MiscellaneousService {
   async update(id: string, updateDto: UpdateMiscellaneousDto) {
     const item = await this.findOne(id);
 
-    // ✅ Validar duplicados SOLO por valor (no por tipoIncidencia)
-    if (updateDto.valor && updateDto.valor.toUpperCase() !== item.valor) {
-      const exists = await this.miscellaneousRepository.findOne({
-        where: {
-          categoria: updateDto.categoria || item.categoria,
-          valor: updateDto.valor.toUpperCase(),
-          _id: { $ne: new ObjectId(id) }, // Excluir el documento actual
-        },
-      });
-      
-      if (exists) {
-        throw new BadRequestException(
-          `El valor '${updateDto.valor}' ya existe en esta categoría`,
-        );
+    const nuevoValor = updateDto.valor ? updateDto.valor.trim().toUpperCase() : item.valor;
+    const valorCambio = nuevoValor !== item.valor;
+
+    const categoriaActual = updateDto.categoria || item.categoria;
+    
+    let nuevoPadreId: string | undefined;
+    let padreCambio = false;
+
+    let nivelSeveridadCambio = false;
+    if (categoriaActual === 'TIPO_CLIENTE') {
+      const nuevoNivel = updateDto.nivelSeveridad || item.nivelSeveridad;
+      if (updateDto.nivelSeveridad && updateDto.nivelSeveridad !== item.nivelSeveridad) {
+        nivelSeveridadCambio = true;
       }
     }
 
-    // ✅ Si se actualiza tipoIncidencia, asegurar que sea array
+    if (categoriaActual === 'SOLUCION_CASO') {
+      nuevoPadreId = updateDto.causaId || item.padreId?.toString();
+      if (updateDto.causaId && updateDto.causaId !== item.padreId?.toString()) {
+        padreCambio = true;
+      }
+    } else if (categoriaActual === 'LOCALIDAD') {
+      nuevoPadreId = updateDto.ciudadId || item.padreId?.toString();
+      if (updateDto.ciudadId && updateDto.ciudadId !== item.padreId?.toString()) {
+        padreCambio = true;
+      }
+    } else if (categoriaActual === 'CIUDAD') {
+      nuevoPadreId = updateDto.estadoId || item.padreId?.toString();
+      if (updateDto.estadoId && updateDto.estadoId !== item.padreId?.toString()) {
+        padreCambio = true;
+      }
+    } else if (categoriaActual === 'SUBCATEGORIA') {
+      nuevoPadreId = updateDto.categoriaId || item.padreId?.toString();
+      if (updateDto.categoriaId && updateDto.categoriaId !== item.padreId?.toString()) {
+        padreCambio = true;
+      }
+    } else if (categoriaActual === 'DETALLE') {
+      nuevoPadreId = updateDto.subcategoriaId || item.padreId?.toString();
+      if (updateDto.subcategoriaId && updateDto.subcategoriaId !== item.padreId?.toString()) {
+        padreCambio = true;
+      }
+    } else {
+      nuevoPadreId = undefined;
+    }
+
+    if (valorCambio || padreCambio || nivelSeveridadCambio) {
+      const whereQuery: any = {
+        categoria: categoriaActual,
+        valor: nuevoValor,
+        _id: { $ne: new ObjectId(id) },
+      };
+
+      if (categoriaActual === 'TIPO_CLIENTE') {
+        whereQuery.nivelSeveridad = updateDto.nivelSeveridad || item.nivelSeveridad;
+      }
+
+      if (nuevoPadreId) {
+        whereQuery.padreId = new ObjectId(nuevoPadreId);
+      }
+
+      const exists = await this.miscellaneousRepository.findOne({ where: whereQuery });
+      
+      if (exists) {
+        if (categoriaActual === 'SOLUCION_CASO') {
+          throw new BadRequestException(
+            `La solución '${nuevoValor}' ya está asociada a esta causa raíz`,
+          );
+        } else if (categoriaActual === 'LOCALIDAD') {
+          throw new BadRequestException(
+            `La localidad '${nuevoValor}' ya está asociada a esta ciudad`,
+          );
+        } else if (categoriaActual === 'CIUDAD') {
+          throw new BadRequestException(
+            `La ciudad '${nuevoValor}' ya está asociada a este estado`,
+          );
+        } else if (categoriaActual === 'SUBCATEGORIA') {
+          throw new BadRequestException(
+            `La subcategoría '${nuevoValor}' ya está asociada a esta categoría`,
+          );
+        } else if (categoriaActual === 'DETALLE') {
+          throw new BadRequestException(
+            `El detalle '${nuevoValor}' ya está asociado a esta subcategoría`,
+          );
+        } else if (categoriaActual === 'TIPO_CLIENTE') {
+          throw new BadRequestException(
+            `El tipo de cliente '${nuevoValor}' con nivel de severidad '${updateDto.nivelSeveridad || item.nivelSeveridad}' ya existe`,
+          );
+        } else {
+          throw new BadRequestException(
+            `El valor '${nuevoValor}' ya existe en esta categoría`,
+          );
+        }
+      }
+    }
+
     let tipoIncidenciaArray = item.tipoIncidencia || [];
     if (updateDto.tipoIncidencia !== undefined) {
       tipoIncidenciaArray = Array.isArray(updateDto.tipoIncidencia) 
@@ -182,11 +297,22 @@ export class MiscellaneousService {
         : [updateDto.tipoIncidencia].filter(Boolean);
     }
 
-    const updatedData = {
+    const updatedData: any = {
       ...updateDto,
-      valor: updateDto.valor ? updateDto.valor.toUpperCase() : item.valor,
+      valor: nuevoValor,
       tipoIncidencia: tipoIncidenciaArray,
     };
+
+    if (nuevoPadreId && nuevoPadreId !== item.padreId?.toString()) {
+      const padre = await this.miscellaneousRepository.findOne({
+        where: { _id: new ObjectId(nuevoPadreId) },
+      });
+      
+      if (padre) {
+        updatedData.padreId = new ObjectId(nuevoPadreId);
+        updatedData.padreNombre = padre.valor;
+      }
+    }
 
     await this.miscellaneousRepository.update(id, updatedData);
     return this.findOne(id);
@@ -195,7 +321,6 @@ export class MiscellaneousService {
   async remove(id: string) {
     const item = await this.findOne(id);
 
-    // Eliminar hijos si es CIUDAD
     if (item.categoria === 'CIUDAD') {
       await this.miscellaneousRepository.delete({
         categoria: 'LOCALIDAD',
@@ -203,7 +328,6 @@ export class MiscellaneousService {
       });
     }
 
-    // Eliminar hijos si es SUBCATEGORIA
     if (item.categoria === 'SUBCATEGORIA') {
       await this.miscellaneousRepository.delete({
         categoria: 'DETALLE',
@@ -211,7 +335,6 @@ export class MiscellaneousService {
       });
     }
 
-    // Eliminar hijos si es CAUSA_RAIZ
     if (item.categoria === 'CAUSA_RAIZ') {
       await this.miscellaneousRepository.delete({
         categoria: 'SOLUCION_CASO',
