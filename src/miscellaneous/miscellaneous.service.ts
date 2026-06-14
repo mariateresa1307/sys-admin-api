@@ -18,30 +18,18 @@ export class MiscellaneousService {
     let padreId: string | undefined;
     let padreNombre: string | undefined;
 
-    // ✅ Validar duplicados CONSIDERANDO tipoIncidencia
-    const whereQuery: any = {
-      categoria: createDto.categoria,
-      valor: createDto.valor.toUpperCase(),
-    };
-
-    // Si es CATEGORIA_RED y tiene tipoIncidencia, incluirlo en la validación
-    if (createDto.categoria === 'CATEGORIA_RED' && createDto.tipoIncidencia) {
-      whereQuery.tipoIncidencia = createDto.tipoIncidencia;
-    }
-
-    const exists = await this.miscellaneousRepository.findOne({ where: whereQuery });
+    //  Validar duplicados SOLO por valor (no por tipoIncidencia)
+    const exists = await this.miscellaneousRepository.findOne({
+      where: {
+        categoria: createDto.categoria,
+        valor: createDto.valor.toUpperCase(),
+      },
+    });
 
     if (exists) {
-      // Si tiene tipoIncidencia, mostrar mensaje más específico
-      if (createDto.tipoIncidencia) {
-        throw new BadRequestException(
-          `El valor '${createDto.valor}' con tipo de incidencia '${createDto.tipoIncidencia}' ya existe en la categoría '${createDto.categoria}'`,
-        );
-      } else {
-        throw new BadRequestException(
-          `El valor '${createDto.valor}' ya existe en la categoría '${createDto.categoria}'`,
-        );
-      }
+      throw new BadRequestException(
+        `El valor '${createDto.valor}' ya existe en la categoría '${createDto.categoria}'`,
+      );
     }
 
     // ✅ MAPEO DE RELACIONES JERÁRQUICAS
@@ -115,11 +103,17 @@ export class MiscellaneousService {
       padreNombre = padre.valor;
     }
 
+    // ✅ Asegurar que tipoIncidencia sea array
+    const tipoIncidenciaArray = createDto.tipoIncidencia 
+      ? (Array.isArray(createDto.tipoIncidencia) ? createDto.tipoIncidencia : [createDto.tipoIncidencia])
+      : [];
+
     const newItem = this.miscellaneousRepository.create({
       ...createDto,
       padreId,
       padreNombre,
       valor: createDto.valor.toUpperCase(),
+      tipoIncidencia: tipoIncidenciaArray, // ✅ Guardar como array
     });
 
     return await this.miscellaneousRepository.save(newItem);
@@ -163,40 +157,35 @@ export class MiscellaneousService {
   async update(id: string, updateDto: UpdateMiscellaneousDto) {
     const item = await this.findOne(id);
 
-    // ✅ Validar duplicados CONSIDERANDO tipoIncidencia en actualizaciones
+    // ✅ Validar duplicados SOLO por valor (no por tipoIncidencia)
     if (updateDto.valor && updateDto.valor.toUpperCase() !== item.valor) {
-      const whereQuery: any = {
-        categoria: updateDto.categoria || item.categoria,
-        valor: updateDto.valor.toUpperCase(),
-        _id: { $ne: new ObjectId(id) }, // Excluir el documento actual
-      };
-
-      // Si es CATEGORIA_RED y tiene tipoIncidencia, incluirlo
-      if (updateDto.categoria === 'CATEGORIA_RED' && updateDto.tipoIncidencia) {
-        whereQuery.tipoIncidencia = updateDto.tipoIncidencia;
-      } else if (item.categoria === 'CATEGORIA_RED' && item.tipoIncidencia) {
-        // Si no se actualiza la categoría pero es CATEGORIA_RED, usar el tipoIncidencia existente
-        whereQuery.tipoIncidencia = updateDto.tipoIncidencia || item.tipoIncidencia;
-      }
-
-      const exists = await this.miscellaneousRepository.findOne({ where: whereQuery });
+      const exists = await this.miscellaneousRepository.findOne({
+        where: {
+          categoria: updateDto.categoria || item.categoria,
+          valor: updateDto.valor.toUpperCase(),
+          _id: { $ne: new ObjectId(id) }, // Excluir el documento actual
+        },
+      });
       
       if (exists) {
-        if (updateDto.tipoIncidencia || item.tipoIncidencia) {
-          throw new BadRequestException(
-            `El valor '${updateDto.valor}' con tipo de incidencia '${updateDto.tipoIncidencia || item.tipoIncidencia}' ya existe en esta categoría`,
-          );
-        } else {
-          throw new BadRequestException(
-            `El valor '${updateDto.valor}' ya existe en esta categoría`,
-          );
-        }
+        throw new BadRequestException(
+          `El valor '${updateDto.valor}' ya existe en esta categoría`,
+        );
       }
+    }
+
+    // ✅ Si se actualiza tipoIncidencia, asegurar que sea array
+    let tipoIncidenciaArray = item.tipoIncidencia || [];
+    if (updateDto.tipoIncidencia !== undefined) {
+      tipoIncidenciaArray = Array.isArray(updateDto.tipoIncidencia) 
+        ? updateDto.tipoIncidencia 
+        : [updateDto.tipoIncidencia].filter(Boolean);
     }
 
     const updatedData = {
       ...updateDto,
       valor: updateDto.valor ? updateDto.valor.toUpperCase() : item.valor,
+      tipoIncidencia: tipoIncidenciaArray,
     };
 
     await this.miscellaneousRepository.update(id, updatedData);
