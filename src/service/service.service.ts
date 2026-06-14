@@ -1,35 +1,52 @@
-import { ConflictException, Injectable, InternalServerErrorException, NotFoundException, OnModuleInit } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MongoRepository } from 'typeorm'; 
+import { MongoRepository } from 'typeorm';
 import { Service } from './entities/service.entity';
 import { ObjectId } from 'mongodb';
+import { ServiceDto } from './dto/service.dto';
 
 @Injectable()
 export class ServiceService implements OnModuleInit {
-
   constructor(
     @InjectRepository(Service)
-    private readonly serviceRepository: MongoRepository<Service>, 
+    private readonly serviceRepository: MongoRepository<Service>,
   ) {}
-
 
   async onModuleInit() {
     try {
-    
       await this.serviceRepository.createCollectionIndex(
-        { id_netuno: 1 }, 
-        { unique: true, partialFilterExpression: { id_netuno: { $exists: true, $ne: null } } }
+        { id_netuno: 1 },
+        {
+          unique: true,
+          partialFilterExpression: { id_netuno: { $exists: true, $ne: null } },
+        },
       );
       await this.serviceRepository.createCollectionIndex(
-        { id_circuito: 1 }, 
-        { unique: true, partialFilterExpression: { id_circuito: { $exists: true, $ne: null } } }
+        { id_circuito: 1 },
+        {
+          unique: true,
+          partialFilterExpression: {
+            id_circuito: { $exists: true, $ne: null },
+          },
+        },
       );
       await this.serviceRepository.createCollectionIndex(
-        { idRBS: 1 }, 
-        { unique: true, partialFilterExpression: { idRBS: { $exists: true, $ne: null } } }
+        { idRBS: 1 },
+        {
+          unique: true,
+          partialFilterExpression: { idRBS: { $exists: true, $ne: null } },
+        },
       );
     } catch (error) {
-      console.warn("Los índices ya existen o no pudieron crearse, continuando...");
+      console.warn(
+        'Los índices ya existen o no pudieron crearse, continuando...',
+      );
     }
   }
 
@@ -39,32 +56,32 @@ export class ServiceService implements OnModuleInit {
     await this.serviceRepository.save(service);
   }
 
-async updateService(id: string, data: any) {
- 
-  const { _id, ...updateData } = data;
+  async updateService(id: string, data: any) {
+    const { _id, ...updateData } = data;
 
-  try {
-    const result = await this.serviceRepository.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: updateData } 
-    );
+    try {
+      const result = await this.serviceRepository.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updateData },
+      );
 
-    if (result.matchedCount === 0) throw new NotFoundException('No encontrado');
-    return { success: true };
-  } catch (error: any) {
-  
-    if (error.code === 11000) {
-      throw new ConflictException('El ID ya existe en otro servicio');
+      if (result.matchedCount === 0)
+        throw new NotFoundException('No encontrado');
+      return { success: true };
+    } catch (error: any) {
+      if (error.code === 11000) {
+        throw new ConflictException('El ID ya existe en otro servicio');
+      }
+      throw new InternalServerErrorException(
+        'Error al actualizar base de datos',
+      );
     }
-    throw new InternalServerErrorException('Error al actualizar base de datos');
   }
-}
-
 
   async findAll(): Promise<Service[]> {
     return await this.serviceRepository.find();
   }
-  
+
   async findServiceById(id: ObjectId): Promise<Service> {
     const service = await this.serviceRepository.findOneBy({ _id: id });
     if (!service) {
@@ -73,25 +90,19 @@ async updateService(id: string, data: any) {
     return service;
   }
 
-  async createService(serviceData: Partial<Service>): Promise<Service> {
-  try {
-    const cleanData = { ...serviceData };
-    Object.keys(cleanData).forEach(k => {
-      const key = k as keyof Partial<Service>;
-      if ((cleanData[key] as any) === "") {
-        (cleanData as any)[key] = null;
+  async createService(serviceData: Partial<ServiceDto>): Promise<Service> {
+    try {
+      const newService = this.serviceRepository.create(serviceData);
+      return await this.serviceRepository.save(newService);
+    } catch (error: any) {
+      if (error.code === 11000) {
+        throw new ConflictException(
+          'Uno de los identificadores únicos (Circuito o ID Netuno) ya está en uso',
+        );
       }
-    });
-
-    const newService = this.serviceRepository.create(cleanData);
-    return await this.serviceRepository.save(newService);
-  } catch (error: any) {
-    if (error.code === 11000) {
-      throw new ConflictException('Uno de los identificadores únicos (Circuito o ID Netuno) ya está en uso');
+      throw error;
     }
-    throw error;
   }
-}
 
   async searchAll(search?: string): Promise<Service[]> {
     if (!search) return this.findAll();
@@ -101,9 +112,9 @@ async updateService(id: string, data: any) {
         $or: [
           { id_circuito: { $regex: search, $options: 'i' } },
           { id_netuno: { $regex: search, $options: 'i' } },
-          { name: { $regex: search, $options: 'i' } }
-        ]
-      } as any 
+          { name: { $regex: search, $options: 'i' } },
+        ],
+      } as any,
     });
     return results;
   }
