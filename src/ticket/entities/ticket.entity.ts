@@ -30,6 +30,27 @@ export class Ticket {
   @Column({ default: 'open' })
   status: string = 'open';
 
+  @Column()
+  subcategoria!: string;
+
+  @Column()
+  detalle?: string;
+
+  @Column()
+  tipoCliente!: string;
+
+  @Column()
+  serviciosAfectados!: string[];
+
+  @Column()
+  ciudad!: string;
+
+  @Column()
+  estado!: string;
+
+  @Column()
+  localidad!: string;
+
   @CreateDateColumn()
   createdAt!: Date;
 

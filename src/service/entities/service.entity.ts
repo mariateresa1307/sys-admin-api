@@ -10,10 +10,8 @@ import {
 
 @Entity('service')
 export class Service {
-  
   @ObjectIdColumn()
   _id!: ObjectId;
-
 
   @Column()
   tipoServicio!: string;
@@ -25,12 +23,12 @@ export class Service {
   city!: string;
 
   @Column()
-  tipo_cliente!: string;
+  tipoCliente!: string;
 
-@Column({ nullable: true })
+  @Column({ nullable: true })
   ipNetuno?: string;
 
-  @Column({  nullable: true })
+  @Column({ nullable: true })
   id_netuno!: string;
 
   @Column({ nullable: true })
@@ -58,10 +56,13 @@ export class Service {
   nodoOLT?: string;
 
   @Column({ nullable: true })
-  diagramaRed?:  string ;
+  diagramaRed?: string;
+
+  @Column({ nullable: false })
+  proveedorDelServicioCompartido!: string;
 
   @Column({ default: 'Activo' })
-  status?: string ;
+  status?: string;
 
   @CreateDateColumn()
   createdAt!: Date;

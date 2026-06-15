@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsArray } from 'class-validator';
 
 export class CreateTicketDto {
   @IsString()
@@ -24,4 +24,33 @@ export class CreateTicketDto {
   @IsString()
   @IsOptional()
   status?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  subcategoria!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  detalle?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  tipoCliente!: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty()
+  serviciosAfectados!: string[];
+
+  @IsString()
+  @IsNotEmpty()
+  ciudad!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  estado!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  localidad!: string;
 }
