@@ -58,6 +58,7 @@ export class AuthService {
       email: user.email,
       primerNombre: user.primerNombre,
       primerApellido: user.primerApellido,
+      role: user.role, 
     };
 
     const access_token = this.jwtService.sign(payload, {
@@ -82,6 +83,7 @@ export class AuthService {
         segundoNombre: user.segundoNombre,
         primerApellido: user.primerApellido,
         segundoApellido: user.segundoApellido,
+         role: user.role,
       },
     };
   }

@@ -5,6 +5,8 @@ import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { ObjectId } from 'mongodb';
 
+const ROLES_VALIDOS = ['admin', 'operador', 'editor'];
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -31,39 +33,35 @@ export class UsersService {
   }
 
   async createUser(userData: Partial<User>): Promise<User> {
-    console.log(" [CREATE USER] Datos recibidos:", userData);
+    console.log("📥 [CREATE USER] Datos recibidos:", userData);
 
     try {
-      
       if (!userData.clave || typeof userData.clave !== 'string') {
-      throw new BadRequestException('La contraseña es requerida');
-    }
+        throw new BadRequestException('La contraseña es requerida');
+      }
 
-    if (!userData.primerNombre) {
-      throw new BadRequestException('El primer nombre es requerido');
-    }
+      if (!userData.primerNombre) {
+        throw new BadRequestException('El primer nombre es requerido');
+      }
 
-    const existingUser = await this.userRepository.findOne({
-      where: {
-        $or: [
-          { username: userData.username },
-          { email: userData.email }
-        ]
-      } as any
-    });
+      const existingUser = await this.userRepository.findOne({
+        where: {
+          $or: [
+            { username: userData.username },
+            { email: userData.email }
+          ]
+        } as any
+      });
 
       if (existingUser) {
-  
         throw new ConflictException('El nombre de usuario o email ya está en uso');
       }
 
-      const role = userData.role || 'admin';
-
-      const rolesValidos = ['admin', 'operador', 'editor'];
-      if (!rolesValidos.includes(role)) {
-       
-        throw new BadRequestException('Rol de usuario no válido');
+      const role = userData.role || 'operador';
+      if (!ROLES_VALIDOS.includes(role)) {
+        throw new BadRequestException(`Rol de usuario no válido. Roles permitidos: ${ROLES_VALIDOS.join(', ')}`);
       }
+
       const hashedPassword = await bcrypt.hash(userData.clave, 10);
   
       const newUser = this.userRepository.create({
@@ -78,13 +76,13 @@ export class UsersService {
         isActive: true
       });
 
-      console.log(" [CREATE USER] Guardando usuario...");
+      console.log("📝 [CREATE USER] Guardando usuario con role:", role);
       const savedUser = await this.userRepository.save(newUser);
-      console.log(" [CREATE USER] Usuario creado exitosamente:", savedUser._id);
+      console.log("✅ [CREATE USER] Usuario creado exitosamente:", savedUser._id);
       
       return savedUser;
     } catch (error) {
-      console.error(" [CREATE USER] Error:", error);
+      console.error("❌ [CREATE USER] Error:", error);
       throw error;
     }
   }
@@ -142,27 +140,25 @@ export class UsersService {
       if (!data.clave || data.clave.trim() === "") {
         delete data.clave;
       } else {
-       
         data.clave = await bcrypt.hash(data.clave, 10);
       }
 
       if (!data.role) {
         data.role = user.role;
       } else {
-        const rolesValidos = ['admin', 'operador', 'editor'];
-        if (!rolesValidos.includes(data.role)) {
-          throw new BadRequestException('Rol de usuario no válido');
+
+        if (!ROLES_VALIDOS.includes(data.role)) {
+          throw new BadRequestException(`Rol de usuario no válido. Roles permitidos: ${ROLES_VALIDOS.join(', ')}`);
         }
       }
 
-    
       Object.assign(user, data);
       const updatedUser = await this.userRepository.save(user);
 
-      
+      console.log("✅ [UPDATE USER] Usuario actualizado:", updatedUser._id);
       return updatedUser;
     } catch (error) {
-      console.error(" [UPDATE USER] Error:", error);
+      console.error("❌ [UPDATE USER] Error:", error);
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }

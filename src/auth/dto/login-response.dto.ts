@@ -9,5 +9,6 @@ export class LoginResponseDto {
     segundoNombre?: string;
     primerApellido: string;
     segundoApellido?: string;
+    role: string; 
   };
 }
