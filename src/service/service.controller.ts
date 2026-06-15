@@ -25,6 +25,7 @@ export class ServiceController {
       id_circuito: s.id_circuito,
       vlan: s.vlan ?? null,
       contrato: s.contrato ?? null,
+      proveedorDelServicioCompartido: s.proveedorDelServicioCompartido,
       nodoA: s.nodoA,
       nodoB: s.nodoB,
       nodoOLT: s.nodoOLT,
@@ -37,6 +38,8 @@ export class ServiceController {
   async createService(@Body() body: ServiceDto) {
     return await this.serviceService.createService(body);
   }
+
+  
 
   @Put(':id')
   async update(@Param('id') id: string, @Body() updateServiceDto: any) {

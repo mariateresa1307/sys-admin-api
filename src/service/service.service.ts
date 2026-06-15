@@ -118,4 +118,44 @@ export class ServiceService implements OnModuleInit {
     });
     return results;
   }
+
+  // ✅ NUEVO MÉTODO: Actualizar servicios que no tienen proveedor
+  async updateMissingProveedor(): Promise<{
+    message: string;
+    updated: number;
+    skipped: number;
+    total: number;
+  }> {
+    console.log('🔧 [ServiceService] Iniciando actualización de proveedores faltantes...');
+    
+    const services = await this.serviceRepository.find();
+    console.log(`🔧 [ServiceService] Total de servicios encontrados: ${services.length}`);
+    
+    let updated = 0;
+    let skipped = 0;
+    
+    for (const service of services) {
+      if (!service.proveedorDelServicioCompartido) {
+        await this.serviceRepository.updateOne(
+          { _id: service._id },
+          { $set: { proveedorDelServicioCompartido: 'TELEFONICA' } },
+        );
+        updated++;
+        console.log(`   ✓ Actualizado: ${service.name || service._id}`);
+      } else {
+        skipped++;
+      }
+    }
+
+    console.log(`✅ [ServiceService] Proceso completado:`);
+    console.log(`   - Actualizados: ${updated}`);
+    console.log(`   - Omitidos (ya tenían proveedor): ${skipped}`);
+
+    return { 
+      message: `${updated} servicios actualizados con proveedor por defecto`,
+      updated,
+      skipped,
+      total: services.length
+    };
+  }
 }

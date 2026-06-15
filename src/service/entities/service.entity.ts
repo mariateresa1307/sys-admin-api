@@ -58,7 +58,7 @@ export class Service {
   @Column({ nullable: true })
   diagramaRed?: string;
 
-  @Column({ nullable: false })
+  @Column({ nullable: true })
   proveedorDelServicioCompartido!: string;
 
   @Column({ default: 'Activo' })

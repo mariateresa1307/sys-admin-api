@@ -55,7 +55,8 @@ export class MiscellaneousService {
       case 'PLATAFORMA':
       case 'SERVICIO':
       case 'ULTIMA_MILLA':
-      case 'POR_DEFINIR':
+      case 'PROVEEDOR':
+
         padreId = undefined;
         break;
 
