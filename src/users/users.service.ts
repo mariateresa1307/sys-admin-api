@@ -1,9 +1,16 @@
-import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, NotFoundException} from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Like, Repository } from 'typeorm';
+import { Like, MongoRepository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { ObjectId } from 'mongodb';
+import { CreateUserDto } from './dto/create-user.dto';
 
 const ROLES_VALIDOS = ['admin', 'operador', 'editor'];
 
@@ -11,11 +18,13 @@ const ROLES_VALIDOS = ['admin', 'operador', 'editor'];
 export class UsersService {
   constructor(
     @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    private readonly userRepository: MongoRepository<User>,
   ) {}
 
   async findUserById(id: string): Promise<User> {
-    const user = await this.userRepository.findOne({ where: { _id: new ObjectId(id) } });
+    const user = await this.userRepository.findOne({
+      where: { _id: new ObjectId(id) },
+    });
     if (!user) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
@@ -24,7 +33,7 @@ export class UsersService {
 
   async findAll(): Promise<User[]> {
     return await this.userRepository.find({
-      order: { primerNombre: 'ASC' }
+      order: { primerNombre: 'ASC' },
     });
   }
 
@@ -32,38 +41,31 @@ export class UsersService {
     return await this.userRepository.findOne({ where: { email } });
   }
 
-  async createUser(userData: Partial<User>): Promise<User> {
-    console.log("📥 [CREATE USER] Datos recibidos:", userData);
+  async createUser(userData: CreateUserDto): Promise<User> {
+    console.log('📥 [CREATE USER] Datos recibidos:', userData);
 
     try {
-      if (!userData.clave || typeof userData.clave !== 'string') {
-        throw new BadRequestException('La contraseña es requerida');
-      }
-
-      if (!userData.primerNombre) {
-        throw new BadRequestException('El primer nombre es requerido');
-      }
-
       const existingUser = await this.userRepository.findOne({
         where: {
-          $or: [
-            { username: userData.username },
-            { email: userData.email }
-          ]
-        } as any
+          $or: [{ username: userData.username }, { email: userData.email }],
+        },
       });
 
       if (existingUser) {
-        throw new ConflictException('El nombre de usuario o email ya está en uso');
+        throw new ConflictException('Usuario invalido');
       }
 
       const role = userData.role || 'operador';
       if (!ROLES_VALIDOS.includes(role)) {
-        throw new BadRequestException(`Rol de usuario no válido. Roles permitidos: ${ROLES_VALIDOS.join(', ')}`);
+        throw new BadRequestException(`Rol de usuario no válido.`);
+      }
+
+      if (!userData.clave) {
+        throw new BadRequestException(`Usuario invalido`);
       }
 
       const hashedPassword = await bcrypt.hash(userData.clave, 10);
-  
+
       const newUser = this.userRepository.create({
         primerNombre: userData.primerNombre!,
         primerApellido: userData.primerApellido!,
@@ -73,25 +75,28 @@ export class UsersService {
         role: role,
         segundoNombre: userData.segundoNombre,
         segundoApellido: userData.segundoApellido,
-        isActive: true
+        isActive: true,
       });
 
-      console.log("📝 [CREATE USER] Guardando usuario con role:", role);
+      console.log('📝 [CREATE USER] Guardando usuario con role:', role);
       const savedUser = await this.userRepository.save(newUser);
-      console.log("✅ [CREATE USER] Usuario creado exitosamente:", savedUser._id);
-      
+      console.log(
+        '✅ [CREATE USER] Usuario creado exitosamente:',
+        savedUser._id,
+      );
+
       return savedUser;
     } catch (error) {
-      console.error("❌ [CREATE USER] Error:", error);
+      console.error('❌ [CREATE USER] Error:', error);
       throw error;
     }
   }
 
   async searchAll(search?: string): Promise<User[]> {
     if (!search) {
-      return await this.userRepository.find({ 
+      return await this.userRepository.find({
         where: { isActive: true },
-        order: { primerNombre: 'ASC' } 
+        order: { primerNombre: 'ASC' },
       });
     }
 
@@ -102,7 +107,7 @@ export class UsersService {
         { primerNombre: Like(`%${search}%`) },
         { primerApellido: Like(`%${search}%`) },
       ],
-      order: { primerNombre: 'ASC' }
+      order: { primerNombre: 'ASC' },
     });
   }
 
@@ -114,30 +119,37 @@ export class UsersService {
 
   async remove(id: string): Promise<void> {
     const user = await this.getUserById(id);
-    user.isActive = false; 
+    user.isActive = false;
     await this.userRepository.save(user);
   }
 
-  async validateUserPassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
+  async validateUserPassword(
+    plainPassword: string,
+    hashedPassword: string,
+  ): Promise<boolean> {
     return bcrypt.compare(plainPassword, hashedPassword);
   }
 
   async getUserById(id: string): Promise<User> {
-    const user = await this.userRepository.findOne({ where: { _id: new ObjectId(id) as any } });
+    const user = await this.userRepository.findOne({
+      where: { _id: new ObjectId(id) as any },
+    });
     if (!user) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
     return user;
   }
- 
+
   async updateUser(id: string, data: any) {
     try {
-      console.log("📥 [UPDATE USER] Datos recibidos:", data);
-      
-      const user = await this.userRepository.findOne({ where: { _id: new ObjectId(id) as any } });
+      console.log('📥 [UPDATE USER] Datos recibidos:', data);
+
+      const user = await this.userRepository.findOne({
+        where: { _id: new ObjectId(id) as any },
+      });
       if (!user) throw new NotFoundException('Usuario no encontrado');
 
-      if (!data.clave || data.clave.trim() === "") {
+      if (!data.clave || data.clave.trim() === '') {
         delete data.clave;
       } else {
         data.clave = await bcrypt.hash(data.clave, 10);
@@ -146,23 +158,29 @@ export class UsersService {
       if (!data.role) {
         data.role = user.role;
       } else {
-
         if (!ROLES_VALIDOS.includes(data.role)) {
-          throw new BadRequestException(`Rol de usuario no válido. Roles permitidos: ${ROLES_VALIDOS.join(', ')}`);
+          throw new BadRequestException(
+            `Rol de usuario no válido. Roles permitidos: ${ROLES_VALIDOS.join(', ')}`,
+          );
         }
       }
 
       Object.assign(user, data);
       const updatedUser = await this.userRepository.save(user);
 
-      console.log("✅ [UPDATE USER] Usuario actualizado:", updatedUser._id);
+      console.log('✅ [UPDATE USER] Usuario actualizado:', updatedUser._id);
       return updatedUser;
     } catch (error) {
-      console.error("❌ [UPDATE USER] Error:", error);
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+      console.error('❌ [UPDATE USER] Error:', error);
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
         throw error;
       }
-      throw new InternalServerErrorException('Error al actualizar base de datos');
+      throw new InternalServerErrorException(
+        'Error al actualizar base de datos',
+      );
     }
   }
 

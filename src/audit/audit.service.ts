@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ObjectId } from 'mongodb';
+import { MongoRepository } from 'typeorm';
+import { FilterOperators, ObjectId } from 'mongodb';
 import * as ExcelJS from 'exceljs';
 import { AuditLog } from '../auth/entities/audit-log.entity';
 import { CreateAuditLogDto } from './dto/create-audit-log.dto';
@@ -11,7 +11,7 @@ import { AuditFilterDto } from './dto/audit-filter.dto';
 export class AuditService {
   constructor(
     @InjectRepository(AuditLog)
-    private readonly auditLogRepository: Repository<AuditLog>,
+    private readonly auditLogRepository: MongoRepository<AuditLog>,
   ) {}
 
   async createLog(createAuditLogDto: CreateAuditLogDto): Promise<AuditLog> {
@@ -26,14 +26,16 @@ export class AuditService {
       ipAddress: createAuditLogDto.ipAddress,
       macAddress: createAuditLogDto.macAddress,
       sourceApplication: createAuditLogDto.sourceApplication,
-      eventDate: createAuditLogDto.fecha ? new Date(createAuditLogDto.fecha) : undefined,
+      eventDate: createAuditLogDto.fecha
+        ? new Date(createAuditLogDto.fecha)
+        : undefined,
     });
 
     return await this.auditLogRepository.save(auditLog);
   }
 
   async findAll(filterDto: AuditFilterDto): Promise<AuditLog[]> {
-    const query: any = {};
+    const query: FilterOperators<AuditLog> = {};
 
     if (filterDto.userId) {
       query.userId = new ObjectId(filterDto.userId);
@@ -44,12 +46,12 @@ export class AuditService {
     }
 
     if (filterDto.startDate || filterDto.endDate) {
-      query.eventDate = {};
+      // query.eventDate;
       if (filterDto.startDate) {
-        query.eventDate.$gte = new Date(filterDto.startDate);
+        query.eventDate = { $gte: new Date(filterDto.startDate) };
       }
       if (filterDto.endDate) {
-        query.eventDate.$lte = new Date(filterDto.endDate);
+        query.eventDate = { $lte: new Date(filterDto.endDate) };
       }
     }
 
@@ -82,7 +84,7 @@ export class AuditService {
       { header: 'Fecha creación', key: 'createdAt', width: 24 },
     ];
 
-    logs.forEach(log => {
+    logs.forEach((log) => {
       worksheet.addRow({
         id: log._id.toString(),
         userId: log.userId?.toString() ?? '',

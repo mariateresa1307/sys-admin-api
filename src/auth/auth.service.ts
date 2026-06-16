@@ -1,9 +1,6 @@
-import {
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { MongoRepository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuditLog, AuditAction } from './entities/audit-log.entity';
@@ -17,7 +14,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     @InjectRepository(AuditLog)
-    private readonly auditLogRepository: Repository<AuditLog>,
+    private readonly auditLogRepository: MongoRepository<AuditLog>,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -26,7 +23,9 @@ export class AuthService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<LoginResponseDto> {
-    const user = await this.usersService.findUserByEmail(loginDto.email.toLowerCase());
+    const user = await this.usersService.findUserByEmail(
+      loginDto.email.toLowerCase(),
+    );
 
     if (!user) {
       await this.createAuditLog({
@@ -39,7 +38,10 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    const isPasswordValid = await this.usersService.validateUserPassword(loginDto.clave, user.clave);
+    const isPasswordValid = await this.usersService.validateUserPassword(
+      loginDto.clave,
+      user.clave,
+    );
 
     if (!isPasswordValid) {
       await this.createAuditLog({
@@ -58,7 +60,7 @@ export class AuthService {
       email: user.email,
       primerNombre: user.primerNombre,
       primerApellido: user.primerApellido,
-      role: user.role, 
+      role: user.role,
     };
 
     const access_token = this.jwtService.sign(payload, {
@@ -83,7 +85,7 @@ export class AuthService {
         segundoNombre: user.segundoNombre,
         primerApellido: user.primerApellido,
         segundoApellido: user.segundoApellido,
-         role: user.role,
+        role: user.role,
       },
     };
   }
