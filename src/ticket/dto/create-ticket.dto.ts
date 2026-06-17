@@ -34,8 +34,8 @@ export class CreateTicketDto {
   detalle?: string;
 
   @IsString()
-  @IsNotEmpty()
-  tipoCliente!: string;
+  @IsOptional()
+  tipoCliente?: string;
 
   @IsArray()
   @IsString({ each: true })
@@ -53,4 +53,8 @@ export class CreateTicketDto {
   @IsString()
   @IsNotEmpty()
   localidad!: string;
+
+  @IsString()
+  @IsOptional()
+  bitacora?: string;
 }
