@@ -51,6 +51,9 @@ export class Ticket {
   @Column()
   localidad!: string;
 
+  @Column()
+  bitacora?: string;
+
   @CreateDateColumn()
   createdAt!: Date;
 

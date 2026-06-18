@@ -12,7 +12,6 @@ import {
 import { TicketService } from './ticket.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
-import { TicketResponseDto } from './dto/ticket-response.dto';
 
 @Controller('tickets')
 @UsePipes(
@@ -26,21 +25,9 @@ export class TicketController {
   constructor(private readonly ticketService: TicketService) {}
 
   @Post()
-  async create(
-    @Body() createTicketDto: CreateTicketDto,
-  ): Promise<TicketResponseDto> {
+  async create(@Body() createTicketDto: CreateTicketDto) {
     const ticket = await this.ticketService.createTicket(createTicketDto);
-    return {
-      _id: ticket._id.toString(),
-      caseNumber: ticket.caseNumber,
-      incidentType: ticket.incidentType,
-      subject: ticket.subject,
-      networkCategory: ticket.networkCategory,
-      description: ticket.description,
-      status: ticket.status,
-      createdAt: ticket.createdAt,
-      updatedAt: ticket.updatedAt,
-    };
+    return ticket;
   }
 
   @Get()
@@ -51,7 +38,7 @@ export class TicketController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<TicketResponseDto> {
+  async findOne(@Param('id') id: string) {
     const ticket = await this.ticketService.findTicketById(id);
     return {
       _id: ticket._id.toString(),
@@ -70,7 +57,7 @@ export class TicketController {
   async update(
     @Param('id') id: string,
     @Body() updateTicketDto: UpdateTicketDto,
-  ): Promise<TicketResponseDto> {
+  ) {
     const ticket = await this.ticketService.updateTicket(id, updateTicketDto);
     return {
       _id: ticket._id.toString(),
