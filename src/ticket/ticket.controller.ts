@@ -37,6 +37,12 @@ export class TicketController {
     return this.ticketService.findAllPaginated(pageNumber, limitNumber);
   }
 
+  @Get('/stats')
+  async stats() {
+    const stats = await this.ticketService.stats();
+    return stats;
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     const ticket = await this.ticketService.findTicketById(id);
@@ -71,4 +77,6 @@ export class TicketController {
       updatedAt: ticket.updatedAt,
     };
   }
+
+  
 }

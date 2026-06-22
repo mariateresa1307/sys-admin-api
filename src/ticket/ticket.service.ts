@@ -9,13 +9,14 @@ import { Ticket } from './entities/ticket.entity';
 import { ObjectId } from 'mongodb';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { TICKET_STATUS } from 'src/utils/constants/tickets';
 
 @Injectable()
 export class TicketService {
   constructor(
     @InjectRepository(Ticket)
     private readonly ticketRepository: MongoRepository<Ticket>,
-  ) {}
+  ) { }
 
   async createTicket(createTicketDto: CreateTicketDto): Promise<Ticket> {
     const newTicket = this.ticketRepository.create(createTicketDto);
@@ -96,5 +97,31 @@ export class TicketService {
     }
 
     return this.findTicketById(id);
+  }
+
+
+  async stats() {
+    const startOfToday = new Date().setHours(0, 0, 0, 0);
+    const endOfToday = new Date().setHours(23, 59, 59, 59);
+
+    const flter = {
+      createdAt: { $gte: new Date(startOfToday), $lte: new Date(endOfToday) }
+    }
+
+    const enGestion = await this.ticketRepository.count({
+      ...flter,
+      status: TICKET_STATUS.EN_GESTION
+    });
+
+
+
+
+    return {
+      totalIncidencias: enGestion,
+      enGestion,
+      casosActivos: "",
+      casosCerrados: ""
+
+    }
   }
 }

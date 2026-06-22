@@ -57,4 +57,16 @@ export class CreateTicketDto {
   @IsString()
   @IsOptional()
   bitacora?: string;
+
+  @IsString()
+  @IsOptional()
+  nodo?: string;
+
+  @IsString()
+  @IsOptional()
+  abonado?: string;
+
+  @IsString()
+  @IsOptional()
+  nombreCliente?: string;
 }

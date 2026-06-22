@@ -54,6 +54,16 @@ export class Ticket {
   @Column()
   bitacora?: string;
 
+  @Column()
+  nodo?: string;
+
+  @Column()
+  abonado?: string;
+
+
+  @Column()
+  nombreCliente?: string;
+
   @CreateDateColumn()
   createdAt!: Date;
 

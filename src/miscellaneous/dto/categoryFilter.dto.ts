@@ -11,6 +11,10 @@ export class CategoryFilterDto {
 
   @IsString()
   @IsOptional()
+  padreNombre?: string;
+
+  @IsString()
+  @IsOptional()
   valor?: string;
 
   @IsString()
