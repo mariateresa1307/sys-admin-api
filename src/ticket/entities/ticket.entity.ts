@@ -60,6 +60,8 @@ export class Ticket {
   @Column()
   abonado?: string;
 
+  @Column()
+  afectacion?: boolean;
 
   @Column()
   nombreCliente?: string;

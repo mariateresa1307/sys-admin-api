@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsOptional, IsArray } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
 
 export class CreateTicketDto {
   @IsString()
@@ -69,4 +69,8 @@ export class CreateTicketDto {
   @IsString()
   @IsOptional()
   nombreCliente?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  afectacion?: boolean;
 }

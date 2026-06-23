@@ -10,6 +10,7 @@ import { ObjectId } from 'mongodb';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { TICKET_STATUS } from 'src/utils/constants/tickets';
+import { filter } from 'rxjs';
 
 @Injectable()
 export class TicketService {
@@ -113,14 +114,23 @@ export class TicketService {
       status: TICKET_STATUS.EN_GESTION
     });
 
+    const casosActivos = await this.ticketRepository.count({
+      ...filter,
+      status: TICKET_STATUS.ACTIVE
+    })
+
+      const casosCerrados = await this.ticketRepository.count({
+      ...filter,
+      status: TICKET_STATUS.CLOSED
+    })
 
 
 
     return {
-      totalIncidencias: enGestion,
+      totalIncidencias: enGestion + casosActivos  + casosCerrados,
       enGestion,
-      casosActivos: "",
-      casosCerrados: ""
+      casosActivos,
+      casosCerrados
 
     }
   }
