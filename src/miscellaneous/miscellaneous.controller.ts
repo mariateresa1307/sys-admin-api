@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch,} from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch,Put} from '@nestjs/common';
 import { MiscellaneousService } from './miscellaneous.service';
 import { CreateMiscellaneousDto } from './dto/create-miscellaneous.dto';
 import { UpdateMiscellaneousDto } from './dto/update-miscellaneous.dto';
 import { CategoryFilterDto } from './dto/categoryFilter.dto';
+import { get } from 'http';
 
 @Controller('miscellaneous')
 export class MiscellaneousController {
@@ -24,11 +25,28 @@ export class MiscellaneousController {
     return this.miscellaneousService.findOne(id);
   }
 
-  @Patch(':id')
+  @Get(':id/with-parents')
+  async findOneWithParents(@Param('id') id: string) {
+
+    const item = await this.miscellaneousService.findOne(id);
+    if (!item.padreId) {
+      return {... item, padre: null}; // Retorna un objeto con un arreglo vacío si no se encuentra el item
+    }
+    const padre = await this.miscellaneousService.findOne(item.padreId.toString());
+    return {... item, padre};
+  }
+
+  /*@Patch(':id')
   update(@Param('id') id: string, @Body() updateDto: UpdateMiscellaneousDto) {
     console.log('Actualizando ID:', id, 'con datos:', updateDto);
     return this.miscellaneousService.update(id, updateDto);
   }
+*/
+  @Put(':id')
+    async update(@Param('id') id: string, @Body() updateMiscellaneousDto: UpdateMiscellaneousDto) {
+      return await this.miscellaneousService.update(id, updateMiscellaneousDto); 
+    }
+  
 
   @Delete(':id')
   remove(@Param('id') id: string) {
