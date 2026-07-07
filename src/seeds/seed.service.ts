@@ -77,7 +77,7 @@ export class SeedService {
       }
     }
 
-    const estadosMap: any = {};
+    const estadosMap = new Map<string, string>();
 
     for (const estadoNombre of Array.from(estadosUnicos)) {
       try {
@@ -87,7 +87,7 @@ export class SeedService {
           descripcion: `Estado ${estadoNombre}`,
           activo: true,
         });
-        estadosMap[estadoNombre] = estado._id;
+        estadosMap.set(estadoNombre, estado._id.toString());
         console.log(`      ✓ Estado: ${estadoNombre}`);
       } catch (error) {
         console.log(`      ⚠️  Estado ${estadoNombre} ya existe`);
@@ -97,25 +97,26 @@ export class SeedService {
         });
         const existente = estados.find((e: any) => e.valor === estadoNombre);
         if (existente) {
-          estadosMap[estadoNombre] = existente._id;
+          estadosMap.set(estadoNombre, existente._id.toString());
         }
       }
     }
 
     // Paso 2: Crear ciudades
     console.log('   🏙️  Paso 2: Creando ciudades...');
-    const ciudadesMap: any = {};
+    const ciudadesMap = new Map<string, string>();
 
     for (const [ciudadNombre, ciudadData] of Object.entries(CIUDADES_DATA)) {
       try {
         const estadoId = ciudadData.estado
-          ? estadosMap[ciudadData.estado]
+          ? estadosMap.get(ciudadData.estado)
+
           : undefined;
 
         const ciudad = await this.miscellaneousService.create({
           categoria: 'CIUDAD',
           valor: ciudadNombre,
-          padreId: estadoId,
+          estadoId: estadoId, 
           padreNombre: ciudadData.estado || undefined,
           descripcion: ciudadData.estado
             ? `${ciudadNombre}, ${ciudadData.estado}`
@@ -123,10 +124,8 @@ export class SeedService {
           activo: true,
         });
 
-        ciudadesMap[ciudadNombre] = ciudad._id;
-        console.log(
-          `      ✓ Ciudad: ${ciudadNombre} ${ciudadData.estado ? `(${ciudadData.estado})` : ''}`,
-        );
+       ciudadesMap.set(ciudadNombre, ciudad._id.toString());
+        console.log(`      ✓ Ciudad: ${ciudadNombre} ${ciudadData.estado ? `(${ciudadData.estado})` : ''}`);
       } catch (error) {
         console.log(`      ⚠️  Ciudad ${ciudadNombre} ya existe`);
         // Buscar la ciudad existente
@@ -135,7 +134,7 @@ export class SeedService {
         });
         const existente = ciudades.find((c: any) => c.valor === ciudadNombre);
         if (existente) {
-          ciudadesMap[ciudadNombre] = existente._id;
+          ciudadesMap.set(ciudadNombre, existente._id.toString());
         }
       }
     }
@@ -146,30 +145,36 @@ export class SeedService {
 
     for (const [ciudadNombre, ciudadData] of Object.entries(CIUDADES_DATA)) {
       if (ciudadData.localidades && ciudadData.localidades.length > 0) {
-        const ciudadId = ciudadesMap[ciudadNombre];
+        const ciudadId = ciudadesMap.get(ciudadNombre);
+        if (!ciudadId) {
+          console.log(`      ⚠️  No se pudo crear localidades para ${ciudadNombre}: ciudad no encontrada`);
+          continue;
+        }
 
-        for (const localidadNombre of ciudadData.localidades) {
+      // ✅ Crear localidades en paralelo para esta ciudad
+        const localidadesPromises = ciudadData.localidades.map(async (localidadNombre) => {
           try {
             await this.miscellaneousService.create({
               categoria: 'LOCALIDAD',
               valor: localidadNombre,
-              padreId: ciudadId,
-              padreNombre: ciudadNombre,
+              ciudadId: ciudadId, // ✅ Campo específico que espera el backend
               descripcion: `${localidadNombre}, ${ciudadNombre}`,
               activo: true,
             });
-            totalLocalidades++;
+            return true;
           } catch (error) {
             // La localidad ya existe, ignorar
+            return false;
           }
-        }
+        });
 
-        console.log(
-          `      ✓ ${ciudadNombre}: ${ciudadData.localidades.length} localidades`,
-        );
+        const results = await Promise.all(localidadesPromises);
+        const creadas = results.filter(r => r).length;
+        totalLocalidades += creadas;
+
+        console.log(`      ✓ ${ciudadNombre}: ${creadas}/${ciudadData.localidades.length} localidades`);
       }
     }
-
     console.log(
       `   ✅ Total: ${Object.keys(estadosMap).length} estados, ${Object.keys(ciudadesMap).length} ciudades, ${totalLocalidades} localidades`,
     );

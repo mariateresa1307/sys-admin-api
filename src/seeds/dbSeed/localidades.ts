@@ -59,7 +59,7 @@ export const CIUDADES_DATA = {
     localidades: ['Hub La Victoria'],
   },
   CARRIZAL: {
-    estado: '',
+    estado: 'ARAGUA',
     localidades: ['HUB Carrizal'],
   },
 };
