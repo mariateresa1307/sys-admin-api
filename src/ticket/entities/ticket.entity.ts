@@ -66,6 +66,75 @@ export class Ticket {
   @Column()
   nombreCliente?: string;
 
+  @Column({ nullable: true })
+  horaInicioFalla?: string;
+
+  @Column({ nullable: true })
+  horaDeteccionNoc?: string;
+
+  @Column({ nullable: true })
+  horaInicioAtencion?: string;
+
+  @Column({ nullable: true })
+  horaEscalamiento?: string;
+
+  @Column({ nullable: true })
+  horaFinAfectacion?: string;
+
+  @Column({ nullable: true })
+  horaCierreFalla?: string;
+
+  @Column({ nullable: true })
+  requiereEscalamiento?: string;
+
+  @Column({ nullable: true })
+  escaladoA?: string;
+
+  @Column({ nullable: true })
+  causaRaiz?: string;
+
+  @Column({ nullable: true })
+  SolucionCaso?: string;
+
+  @Column({ nullable: true })
+  turnoAsignado?: string;
+
+  @Column({ nullable: true })
+  ttZoho?: string;
+
+  @Column({ nullable: true })
+  ttClienteProveedor?: string;
+
+  @Column({ nullable: true })
+  operatorResponsable?: string;
+
+  @Column({ nullable: true })
+  operatorAsignado?: string;
+
+  @Column({ nullable: true })
+  operador?: string;
+
+  @Column({ nullable: true })
+  severidad?: string;
+
+  @Column({ nullable: true })
+  imputable?: string;
+
+  @Column({ nullable: true })
+  tDeteccion?: number;
+
+  @Column({ nullable: true })
+  tAtencion?: number;
+
+  @Column({ nullable: true })
+  tEscalado?: number;
+
+  @Column({ nullable: true })
+  cCierreSoporte?: number;
+
+  @Column({ nullable: true })
+  mttrTotal?: number;
+
   @CreateDateColumn()
   createdAt!: Date;
 

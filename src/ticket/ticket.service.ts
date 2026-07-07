@@ -61,25 +61,9 @@ export class TicketService {
     id: string,
     updateTicketDto: UpdateTicketDto,
   ): Promise<Ticket> {
-    const updateData: Partial<UpdateTicketDto> = {};
-    if (updateTicketDto.caseNumber !== undefined) {
-      updateData.caseNumber = updateTicketDto.caseNumber;
-    }
-    if (updateTicketDto.incidentType !== undefined) {
-      updateData.incidentType = updateTicketDto.incidentType;
-    }
-    if (updateTicketDto.subject !== undefined) {
-      updateData.subject = updateTicketDto.subject;
-    }
-    if (updateTicketDto.networkCategory !== undefined) {
-      updateData.networkCategory = updateTicketDto.networkCategory;
-    }
-    if (updateTicketDto.description !== undefined) {
-      updateData.description = updateTicketDto.description;
-    }
-    if (updateTicketDto.status !== undefined) {
-      updateData.status = updateTicketDto.status;
-    }
+    const updateData = Object.fromEntries(
+      Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
+    );
 
     let objectId: ObjectId;
     try {
