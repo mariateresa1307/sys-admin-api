@@ -24,13 +24,32 @@ export class TicketService {
     return await this.ticketRepository.save(newTicket);
   }
 
-  async findAllPaginated(page = 1, limit = 10) {
+  async findAllPaginated(
+    page = 1,
+    limit = 10,
+    filters: {
+      caseNumber?: string;
+      subject?: string;
+      status?: string;
+      primerNombre?: string;
+    } = {},
+  ) {
     const take = limit > 0 ? limit : 10;
     const skip = page > 1 ? (page - 1) * take : 0;
+    const where = this.buildSearchFilter(filters);
+    const findOptions: Record<string, unknown> = {
+      skip,
+      take,
+      order: { createdAt: 'DESC' },
+    };
+
+    if (where) {
+      findOptions.where = where;
+    }
 
     const [data, total] = await Promise.all([
-      this.ticketRepository.find({ skip, take, order: { createdAt: 'DESC' } }),
-      this.ticketRepository.count(),
+      this.ticketRepository.find(findOptions as any),
+      where ? this.ticketRepository.count(where) : this.ticketRepository.count(),
     ]);
 
     return {
@@ -40,6 +59,38 @@ export class TicketService {
       limit: take,
       totalPages: Math.ceil(total / take),
     };
+  }
+
+  private buildSearchFilter(filters: {
+    caseNumber?: string;
+    subject?: string;
+    status?: string;
+    primerNombre?: string;
+  }) {
+    const where: Record<string, unknown> = {};
+
+    if (filters.caseNumber?.trim()) {
+      where.caseNumber = { $regex: filters.caseNumber.trim(), $options: 'i' };
+    }
+
+    if (filters.subject?.trim()) {
+      where.subject = { $regex: filters.subject.trim(), $options: 'i' };
+    }
+
+    if (filters.status?.trim()) {
+      where.status = filters.status.trim();
+    }
+
+    if (filters.primerNombre?.trim()) {
+      const term = filters.primerNombre.trim();
+      where.$or = [
+        { operatorResponsable: { $regex: term, $options: 'i' } },
+        { operatorAsignado: { $regex: term, $options: 'i' } },
+        { operador: { $regex: term, $options: 'i' } },
+      ];
+    }
+
+    return Object.keys(where).length > 0 ? where : null;
   }
 
   async findTicketById(id: string): Promise<Ticket> {
@@ -84,38 +135,37 @@ export class TicketService {
     return this.findTicketById(id);
   }
 
-
   async stats() {
     const startOfToday = new Date().setHours(0, 0, 0, 0);
     const endOfToday = new Date().setHours(23, 59, 59, 59);
 
     const flter = {
-      createdAt: { $gte: new Date(startOfToday), $lte: new Date(endOfToday) }
-    }
+      createdAt: {
+        $gte: new Date(startOfToday),
+        $lte: new Date(endOfToday),
+      },
+    };
 
     const enGestion = await this.ticketRepository.count({
       ...flter,
-      status: TICKET_STATUS.EN_GESTION
+      status: TICKET_STATUS.EN_GESTION,
     });
 
     const casosActivos = await this.ticketRepository.count({
       ...filter,
-      status: TICKET_STATUS.ACTIVE
-    })
+      status: TICKET_STATUS.PENDIENTE,
+    });
 
-      const casosCerrados = await this.ticketRepository.count({
+    const casosCerrados = await this.ticketRepository.count({
       ...filter,
-      status: TICKET_STATUS.CLOSED
-    })
-
-
+      status: TICKET_STATUS.CERRADO,
+    });
 
     return {
-      totalIncidencias: enGestion + casosActivos  + casosCerrados,
+      totalIncidencias: enGestion + casosActivos + casosCerrados,
       enGestion,
       casosActivos,
-      casosCerrados
-
-    }
+      casosCerrados,
+    };
   }
 }

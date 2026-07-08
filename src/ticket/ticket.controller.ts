@@ -31,10 +31,22 @@ export class TicketController {
   }
 
   @Get()
-  async findAll(@Query('page') page = '1', @Query('limit') limit = '10') {
+  async findAll(
+    @Query('page') page = '1',
+    @Query('limit') limit = '10',
+    @Query('caseNumber') caseNumber?: string,
+    @Query('subject') subject?: string,
+    @Query('status') status?: string,
+    @Query('primerNombre') primerNombre?: string,
+  ) {
     const pageNumber = Number(page) || 1;
     const limitNumber = Number(limit) || 10;
-    return this.ticketService.findAllPaginated(pageNumber, limitNumber);
+    return this.ticketService.findAllPaginated(pageNumber, limitNumber, {
+      caseNumber,
+      subject,
+      status,
+      primerNombre,
+    });
   }
 
   @Get('/stats')
