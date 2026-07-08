@@ -153,7 +153,7 @@ export class TicketService {
 
     const casosActivos = await this.ticketRepository.count({
       ...filter,
-      status: TICKET_STATUS.PENDIENTE,
+      status: TICKET_STATUS.ACTIVO,
     });
 
     const casosCerrados = await this.ticketRepository.count({
