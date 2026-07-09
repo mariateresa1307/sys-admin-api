@@ -11,6 +11,8 @@ import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { ObjectId } from 'mongodb';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UserfilterDTO } from './dto/user-filter.dto';
+
 
 const ROLES_VALIDOS = ['admin', 'operador', 'editor'];
 
@@ -31,9 +33,14 @@ export class UsersService {
     return user;
   }
 
-  async findAll(): Promise<User[]> {
+  async findAll(userFileter: UserfilterDTO): Promise<User[]> {
+    const where: UserfilterDTO = {};
+    if (userFileter.isActive !== undefined) {
+      where.isActive = userFileter.isActive;
+    }
     return await this.userRepository.find({
       order: { primerNombre: 'ASC' },
+      where,
     });
   }
 

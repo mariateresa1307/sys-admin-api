@@ -1,4 +1,16 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Put } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Request,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UserResponseDto } from './dto/user-response.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -9,17 +21,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Get() 
-  async findAll() {
-    return await this.usersService.findAll();
+  @Get()
+  async findAll(@Query('isActive') isActive: boolean) {
+    return await this.usersService.findAll({ isActive });
   }
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async getCurrentUser(@Request() req: any): Promise<UserResponseDto> {
-
     const user = await this.usersService.getUserById(req.user._id);
-    
+
     return {
       _id: user._id.toString(), 
       email: user.email,

@@ -11,13 +11,16 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { TICKET_STATUS } from 'src/utils/constants/tickets';
 import { filter } from 'rxjs';
+import { UsersService } from 'src/users/users.service';
+import { User } from 'src/users/entities/user.entity';
 
 @Injectable()
 export class TicketService {
   constructor(
     @InjectRepository(Ticket)
     private readonly ticketRepository: MongoRepository<Ticket>,
-  ) { }
+    private readonly usersService: UsersService,
+  ) {}
 
   async createTicket(createTicketDto: CreateTicketDto): Promise<Ticket> {
     const newTicket = this.ticketRepository.create(createTicketDto);
@@ -52,13 +55,53 @@ export class TicketService {
       where ? this.ticketRepository.count(where) : this.ticketRepository.count(),
     ]);
 
+    const enrichedData = await this.enrichTicketsWithUsers(data);
+
     return {
-      data,
+      data: enrichedData,
       total,
       page,
       limit: take,
       totalPages: Math.ceil(total / take),
     };
+  }
+
+  private async enrichTicketsWithUsers(tickets: Ticket[]) {
+    const userIds = new Set<string>();
+
+    for (const ticket of tickets) {
+      if (ticket.operatorAsignado) {
+        userIds.add(ticket.operatorAsignado);
+      }
+      if (ticket.operatorResponsable) {
+        userIds.add(ticket.operatorResponsable);
+      }
+    }
+
+    const userMap = new Map<string, Omit<User, 'clave'>>();
+
+    await Promise.all(
+      [...userIds].map(async (id) => {
+        try {
+          const user = await this.usersService.findUserById(id);
+          const { clave, ...userWithoutPassword } = user;
+          void clave;
+          userMap.set(id, userWithoutPassword);
+        } catch {
+          // Usuario no encontrado, se omite
+        }
+      }),
+    );
+
+    return tickets.map((ticket) => ({
+      ...ticket,
+      operatorAsignado: ticket.operatorAsignado
+        ? userMap.get(ticket.operatorAsignado) ?? ticket.operatorAsignado
+        : ticket.operatorAsignado,
+      operatorResponsable: ticket.operatorResponsable
+        ? userMap.get(ticket.operatorResponsable) ?? ticket.operatorResponsable
+        : ticket.operatorResponsable,
+    }));
   }
 
   private buildSearchFilter(filters: {
