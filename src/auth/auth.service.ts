@@ -105,6 +105,7 @@ export class AuthService {
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
       details: params.details,
+      
     });
 
     await this.auditLogRepository.save(auditLog);

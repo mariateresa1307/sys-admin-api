@@ -6,19 +6,28 @@ import {
   IsNotEmpty,
   IsIP,
   IsMACAddress,
+  IsEnum,
 } from 'class-validator';
+import { AuditAction, AuditModule } from '../../auth/entities/audit-log.entity';
 
 export class CreateAuditLogDto {
   @IsOptional()
   @IsMongoId()
-  idUsuario?: string;
+  userId?: string;
 
   @IsDateString()
-  fecha: string;
+  fecha?: string;
 
   @IsString()
   @IsNotEmpty()
-  tipoAccion: string;
+  tipoAccion?: string;
+
+
+  @IsString()
+  userEmail?: string;
+
+  @IsEnum(AuditAction)
+  action?: AuditAction;
 
   @IsOptional()
   @IsString()
@@ -43,4 +52,13 @@ export class CreateAuditLogDto {
   @IsOptional()
   @IsString()
   sourceApplication?: string;
+
+  @IsOptional()
+  @IsString()
+  recordId?: string;
+
+  @IsOptional()
+  @IsString()
+  details?: string;
+
 }

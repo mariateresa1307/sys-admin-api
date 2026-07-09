@@ -1,11 +1,13 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch,Put} from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, UseGuards,Put} from '@nestjs/common';
 import { MiscellaneousService } from './miscellaneous.service';
 import { CreateMiscellaneousDto } from './dto/create-miscellaneous.dto';
 import { UpdateMiscellaneousDto } from './dto/update-miscellaneous.dto';
 import { CategoryFilterDto } from './dto/categoryFilter.dto';
 import { get } from 'http';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('miscellaneous')
+//@UseGuards(JwtAuthGuard)
 export class MiscellaneousController {
   constructor(private readonly miscellaneousService: MiscellaneousService) {}
 

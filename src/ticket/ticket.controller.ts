@@ -1,17 +1,9 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  Put,
-  Query,
-  UsePipes,
-  ValidationPipe,
+import { Body, Controller, Get,Param, Post, Put,  Query,  UsePipes,  ValidationPipe,UseGuards
 } from '@nestjs/common';
 import { TicketService } from './ticket.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('tickets')
 @UsePipes(
@@ -21,6 +13,7 @@ import { UpdateTicketDto } from './dto/update-ticket.dto';
     forbidNonWhitelisted: true,
   }),
 )
+@UseGuards(JwtAuthGuard) 
 export class TicketController {
   constructor(private readonly ticketService: TicketService) {}
 

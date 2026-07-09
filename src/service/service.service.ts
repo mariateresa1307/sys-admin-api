@@ -104,6 +104,12 @@ export class ServiceService implements OnModuleInit {
     }
   }
 
+  async removeService(id: string): Promise<void> {
+    const service = await this.findServiceById(new ObjectId(id));
+    service.status = 'Inactivo';
+    await this.serviceRepository.save(service);
+  }
+
   async searchAll(search?: string): Promise<Service[]> {
     if (!search) return this.findAll();
 

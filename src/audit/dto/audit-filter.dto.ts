@@ -1,17 +1,28 @@
-import { IsOptional, IsMongoId, IsDateString, IsString } from 'class-validator';
+import { IsOptional, IsMongoId, IsDateString, IsString, isEnum } from 'class-validator';
+import { AuditAction, AuditModule } from '../../auth/entities/audit-log.entity';
 
 export class AuditFilterDto {
   @IsOptional()
   @IsMongoId()
   userId?: string;
-
-  @IsDateString()
-  startDate: string;
-
-  @IsDateString()
-  endDate: string;
-
+  
   @IsOptional()
   @IsString()
   action?: string;
+
+  @IsOptional()
+  @IsString()
+  module?: string;
+
+  @IsDateString()
+  startDate?: string;
+
+  @IsDateString()
+  endDate?: string;
+
+  @IsOptional()
+  page?: number = 1;
+
+  @IsOptional()
+  limit?: number = 20;
 }

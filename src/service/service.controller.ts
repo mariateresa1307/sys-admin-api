@@ -1,9 +1,11 @@
-import { Controller, Post, Get, Body, Param, Query, Put } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, Put ,UseGuards, Delete} from '@nestjs/common';
 import { ServiceService } from '../service/service.service';
 import { ServiceResponseDto, ServiceDto } from './dto/service.dto';
 import { ObjectId } from 'mongodb';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('services')
+@UseGuards(JwtAuthGuard)
 export class ServiceController {
   constructor(private readonly serviceService: ServiceService) {}
 
@@ -51,5 +53,10 @@ export class ServiceController {
   async findOne(@Param('id') id: string) {
     // Convertimos el string a ObjectId aquí mismo
     return await this.serviceService.findServiceById(new ObjectId(id));
+  }
+
+    @Delete(':id')
+  async remove(@Param('id') id: string) {
+    return await this.serviceService.removeService(id);
   }
 }

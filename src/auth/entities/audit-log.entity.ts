@@ -10,12 +10,23 @@ export enum AuditAction {
   LOGIN = 'LOGIN',
   LOGIN_FAILED = 'LOGIN_FAILED',
   LOGOUT = 'LOGOUT',
+  CREATE = 'CREATE',
+  UPDATE = 'UPDATE',
+  DELETE = 'DELETE',
+  EXPORT = 'EXPORT',
+}
+export enum AuditModule {
+  AUTH = 'AUTH',
+  USER = 'USER',
+  TICKET = 'TICKET',
+  MISCELLANEOUS = 'MISCELLANEOUS',
+  SERVICE = 'SERVICE',
 }
 
 @Entity('audit_logs')
 export class AuditLog {
   @ObjectIdColumn()
-  _id: ObjectId;
+  _id?: ObjectId;
 
   @Column({ type: 'objectId' as any, nullable: true })
   userId?: ObjectId;
@@ -24,7 +35,7 @@ export class AuditLog {
   userEmail?: string;
 
   @Column({ nullable: false })
-  action: string;
+  action?: string;
 
   @Column({ nullable: true })
   moduleId?: string;
@@ -54,5 +65,5 @@ export class AuditLog {
   details?: string;
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt?: Date;
 }
