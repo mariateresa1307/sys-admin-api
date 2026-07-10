@@ -12,7 +12,8 @@ export class AuditFilterDto {
 
   @IsOptional()
   @IsString()
-  module?: string;
+  moduleId?: string;
+
 
   @IsDateString()
   startDate?: string;

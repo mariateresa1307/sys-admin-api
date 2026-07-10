@@ -16,9 +16,15 @@ export class AuditService {
   ) {}
 
   async createLog(dto: CreateAuditLogDto): Promise<AuditLog> {
+
+     console.log('📥 [AuditService] createLog llamado con:');
+  console.log('  - moduleId:', dto.moduleId);
+  console.log('  - action:', dto.tipoAccion || dto.action);
+  console.log('  - DTO completo:', dto);
+
     const auditLogData: any = {
       userId: dto.userId ? new ObjectId(dto.userId) : undefined,
-      action: dto.tipoAccion,
+      action: dto.tipoAccion || dto.action,
       moduleId: dto.moduleId,
       oldValue: dto.oldValue,
       newValue: dto.newValue,
@@ -28,11 +34,18 @@ export class AuditService {
       recordId: dto.recordId,
       eventDate: dto.fecha ? new Date(dto.fecha) : undefined,
       details: dto.details,
+      
     };
+     console.log('💾 [AuditService] Datos a guardar:', auditLogData);
 
     const auditLog = this.auditLogRepository.create(auditLogData) as AuditLog;
+  const saved = await this.auditLogRepository.save(auditLog);
+ console.log('✅ [AuditService] Log guardado con ID:', saved._id);
+  console.log('✅ [AuditService] moduleId guardado:', saved.moduleId);
 
-    return await this.auditLogRepository.save(auditLog);
+
+  return saved;
+   // return await this.auditLogRepository.save(auditLog);
   }
 
   private buildQuery(filterDto: AuditFilterDto): any {
@@ -40,7 +53,7 @@ export class AuditService {
 
     if (filterDto.userId) query.userId = new ObjectId(filterDto.userId);
     if (filterDto.action) query.action = filterDto.action;
-    if (filterDto.module) query.moduleId = filterDto.module;
+    if (filterDto.moduleId) query.moduleId = filterDto.moduleId;
 
     if (filterDto.startDate || filterDto.endDate) {
       query.eventDate = {};

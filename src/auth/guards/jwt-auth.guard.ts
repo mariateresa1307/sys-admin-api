@@ -1,10 +1,17 @@
-import { Injectable, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
+  private readonly logger = new Logger(JwtAuthGuard.name);
+
   canActivate(context: ExecutionContext) {
-    console.log('🔒 [JwtAuthGuard] canActivate - URL:', context.switchToHttp().getRequest().url);
+    const request = context.switchToHttp().getRequest();
+    const authHeader = request.headers.authorization;
+    
+    console.log('🔒 [JwtAuthGuard] canActivate - URL:', request.url);
+    console.log('🔒 [JwtAuthGuard] Authorization header:', authHeader ? `${authHeader.substring(0, 30)}...` : 'NO PRESENTE');
+    
     return super.canActivate(context);
   }
 
@@ -14,17 +21,26 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     info: any,
     context: ExecutionContext,
   ): any {
- /*   const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest();
+    
+    // ✅ SIEMPRE mostrar logs, incluso cuando falla
     console.log('👤 [JwtAuthGuard] handleRequest - URL:', request.url);
-    console.log('👤 [JwtAuthGuard] User:', user ? '✅ EXISTE' : '❌ NO EXISTE');
-    console.log('️ [JwtAuthGuard] Info:', info?.message || 'Sin info');*/
+    console.log('👤 [JwtAuthGuard] User:', user ? `✅ ${user.email}` : '❌ NO EXISTE');
+    console.log('ℹ️ [JwtAuthGuard] Info:', info?.message || 'Sin info');
     
     if (err) {
-      console.log(' [JwtAuthGuard] Error:', err.message);
+      console.error(' [JwtAuthGuard] Error:', err.message);
+      console.error(' [JwtAuthGuard] Error stack:', err.stack);
     }
     
-    if (!user) {
-      throw err || new UnauthorizedException('No autenticado - Token inválido o expirado');
+    if (info) {
+      console.log('ℹ️ [JwtAuthGuard] Info details:', info);
+    }
+    
+    if (err || !user) {
+      const errorMessage = err?.message || info?.message || 'No autenticado';
+      console.error('❌ [JwtAuthGuard] Rechazando acceso:', errorMessage);
+      throw err || new UnauthorizedException(errorMessage);
     }
     
     console.log('✅ [JwtAuthGuard] User autenticado:', user.email, 'Role:', user.role);

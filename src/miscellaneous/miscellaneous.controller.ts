@@ -7,7 +7,7 @@ import { get } from 'http';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('miscellaneous')
-//@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class MiscellaneousController {
   constructor(private readonly miscellaneousService: MiscellaneousService) {}
 
@@ -38,12 +38,6 @@ export class MiscellaneousController {
     return {... item, padre};
   }
 
-  /*@Patch(':id')
-  update(@Param('id') id: string, @Body() updateDto: UpdateMiscellaneousDto) {
-    console.log('Actualizando ID:', id, 'con datos:', updateDto);
-    return this.miscellaneousService.update(id, updateDto);
-  }
-*/
   @Put(':id')
     async update(@Param('id') id: string, @Body() updateMiscellaneousDto: UpdateMiscellaneousDto) {
       return await this.miscellaneousService.update(id, updateMiscellaneousDto); 
