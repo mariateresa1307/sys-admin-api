@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, UseGuards,Put} from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, UseGuards, Put, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { MiscellaneousService } from './miscellaneous.service';
 import { CreateMiscellaneousDto } from './dto/create-miscellaneous.dto';
 import { UpdateMiscellaneousDto } from './dto/update-miscellaneous.dto';
 import { CategoryFilterDto } from './dto/categoryFilter.dto';
-import { get } from 'http';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+
 
 @Controller('miscellaneous')
 @UseGuards(JwtAuthGuard)
@@ -39,8 +40,13 @@ export class MiscellaneousController {
   }
 
   @Put(':id')
-    async update(@Param('id') id: string, @Body() updateMiscellaneousDto: UpdateMiscellaneousDto) {
-      return await this.miscellaneousService.update(id, updateMiscellaneousDto); 
+    async update(
+      @Param('id') id: string, 
+      @Body() updateMiscellaneousDto: UpdateMiscellaneousDto,
+      @Req() req: Request
+    ) {
+    
+      return await this.miscellaneousService.update(id, updateMiscellaneousDto,req); 
     }
   
 

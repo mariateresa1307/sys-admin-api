@@ -16,10 +16,12 @@ import { MiscellaneousModule } from './miscellaneous/miscellaneous.module';
 import { Miscellaneous } from './miscellaneous/entities/miscellaneous.entity';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
+import { JwtModule } from '@nestjs/jwt'; 
 
 
 @Module({
   imports: [
+     JwtModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',

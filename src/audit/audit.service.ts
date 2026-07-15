@@ -23,7 +23,8 @@ export class AuditService {
   console.log('  - DTO completo:', dto);
 
     const auditLogData: any = {
-      userId: dto.userId ? new ObjectId(dto.userId) : undefined,
+      userId: dto.userId ? new ObjectId(dto.userId) : null,
+      userEmail: dto.userEmail || null,
       action: dto.tipoAccion || dto.action,
       moduleId: dto.moduleId,
       oldValue: dto.oldValue,
@@ -34,14 +35,17 @@ export class AuditService {
       recordId: dto.recordId,
       eventDate: dto.fecha ? new Date(dto.fecha) : undefined,
       details: dto.details,
-      
+      userAgent: (dto as any).userAgent,
     };
      console.log('💾 [AuditService] Datos a guardar:', auditLogData);
 
-    const auditLog = this.auditLogRepository.create(auditLogData) as AuditLog;
+  const auditLog = this.auditLogRepository.create(auditLogData) as AuditLog;
   const saved = await this.auditLogRepository.save(auditLog);
- console.log('✅ [AuditService] Log guardado con ID:', saved._id);
-  console.log('✅ [AuditService] moduleId guardado:', saved.moduleId);
+
+console.log('✅ [AuditService] Log guardado exitosamente:');
+  console.log('  - _id:', saved._id);
+  console.log('  - userEmail:', saved.userEmail);
+  console.log('  - userId:', saved.userId);
 
 
   return saved;

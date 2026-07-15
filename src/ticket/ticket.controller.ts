@@ -1,5 +1,6 @@
-import { Body, Controller, Get,Param, Post, Put,  Query,  UsePipes,  ValidationPipe,UseGuards
+import {  Body, Controller,  Get,  Param,  Post,  Put, Query,  UsePipes, ValidationPipe,  UseGuards, Req 
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { TicketService } from './ticket.service';
 import { TicketDto } from './dto/create-ticket.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -68,9 +69,10 @@ export class TicketController {
   async update(
     @Param('id') id: string,
     @Body() updateTicketDto: UpdateTicketDto,
+    @Req() req: Request 
   ) {
-    const ticket = await this.ticketService.updateTicket(id, updateTicketDto);
+    // ✅ 4. Pasarlo al servicio
+    const ticket = await this.ticketService.updateTicket(id, updateTicketDto, req);
     return ticket;
-    
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, Query, Put ,UseGuards, Delete} from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, Put ,UseGuards, Delete, Req} from '@nestjs/common';
 import { ServiceService } from '../service/service.service';
 import { ServiceResponseDto, ServiceDto } from './dto/service.dto';
 import { ObjectId } from 'mongodb';
@@ -44,9 +44,20 @@ export class ServiceController {
   
 
   @Put(':id')
-  async update(@Param('id') id: string, @Body() updateServiceDto: any) {
+  async update(
+    @Param('id') id: string,
+    @Body() updateServiceDto: any,
+  @Req() req: any
+  ){
+
+     console.log('📝 [ServiceController] Update llamado para ID:', id);
+  console.log('📝 [ServiceController] ¿Existe req?', !!req);
+  console.log('📝 [ServiceController] Body:', updateServiceDto);
     console.log('Actualizando servicio:', id, 'con datos:', updateServiceDto);
-    return await this.serviceService.updateService(id, updateServiceDto);
+    const result = await this.serviceService.updateService(id, updateServiceDto, req);
+  
+  console.log('📝 [ServiceController] Resultado:', result);
+  return result;
   }
 
   @Get(':id')

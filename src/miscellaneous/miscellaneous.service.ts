@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException , UseGuards, Req} from '@nestjs/common';
+import type { Request } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MongoRepository } from 'typeorm';
 import { ObjectId } from 'mongodb';
@@ -6,12 +7,15 @@ import { Miscellaneous } from './entities/miscellaneous.entity';
 import { CreateMiscellaneousDto } from './dto/create-miscellaneous.dto';
 import { UpdateMiscellaneousDto } from './dto/update-miscellaneous.dto';
 import { CategoryFilterDto } from './dto/categoryFilter.dto';
+import { AuditService } from '../audit/audit.service'; // ✅ 1. Importar AuditService
+import { AuditAction } from '../auth/entities/audit-log.entity';
 
 @Injectable()
 export class MiscellaneousService {
   constructor(
     @InjectRepository(Miscellaneous)
     private readonly miscellaneousRepository: MongoRepository<Miscellaneous>,
+      private readonly auditService: AuditService, 
   ) {}
 
   async create(createDto: CreateMiscellaneousDto) {
@@ -177,8 +181,28 @@ export class MiscellaneousService {
     return item;
   }
 
-  async update(id: string, updateDto: UpdateMiscellaneousDto) {
+  async update(id: string, updateDto: UpdateMiscellaneousDto,  req?: any) {
     const item = await this.findOne(id);
+
+       const oldValue = item ? {
+      categoria: item.categoria,
+      valor: item.valor,
+      padreId: item.padreId,
+      padreNombre: item.padreNombre,
+      activo: item.activo,
+      tipoIncidencia: item.tipoIncidencia,
+      descripcion: item.descripcion,
+      // Agrega más campos si es necesario
+    } : null;
+  
+     if (item && req) {
+      // Eliminamos campos internos de MongoDB para un log de auditoría limpio
+      const { _id, __v, createdAt, updatedAt, ...safeOldData } = item as any;
+      (req as any).oldValue = safeOldData;
+       console.log('🟡 [SERVICE] oldValue asignado al req. Campos:', Object.keys(safeOldData));
+    }else {
+      console.log('🔴 [SERVICE] FALLO: No se asignó oldValue. item existe:', !!item, 'req existe:', !!req);
+    }
 
     const nuevoValor = updateDto.valor ? updateDto.valor.trim().toUpperCase() : item.valor;
     const valorCambio = nuevoValor !== item.valor;
@@ -300,6 +324,9 @@ export class MiscellaneousService {
     }
 
     await this.miscellaneousRepository.update(id, updatedData);
+
+   
+
     return this.findOne(id);
   }
 

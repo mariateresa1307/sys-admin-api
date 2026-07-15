@@ -10,9 +10,9 @@ import { ObjectId } from 'mongodb';
 import { TicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { TICKET_STATUS } from 'src/utils/constants/tickets';
-import { filter } from 'rxjs';
 import { UsersService } from 'src/users/users.service';
 import { User } from 'src/users/entities/user.entity';
+import { Request } from 'express'; // ✅ 1. Importar Request
 
 @Injectable()
 export class TicketService {
@@ -24,7 +24,8 @@ export class TicketService {
 
   async createTicket(createTicketDto: TicketDto): Promise<Ticket> {
     const newTicket = this.ticketRepository.create(createTicketDto);
-    return await this.ticketRepository.save(newTicket);
+    const savedTicket = await this.ticketRepository.save(newTicket);
+    return Array.isArray(savedTicket) ? savedTicket[0]! : savedTicket;
   }
 
   async findAllPaginated(
@@ -144,16 +145,18 @@ export class TicketService {
       throw new BadRequestException('ID inválido');
     }
 
-    const ticket = await this.ticketRepository.findOneBy({ _id: objectId });
+    const ticket = await this.ticketRepository.findOneBy({ _id: objectId } as any);
     if (!ticket) {
       throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
     }
     return ticket;
   }
 
+ 
   async updateTicket(
     id: string,
     updateTicketDto: UpdateTicketDto,
+    req?: Request, // ✅ 2. Recibir el request
   ): Promise<Ticket> {
     const updateData = Object.fromEntries(
       Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
@@ -166,6 +169,17 @@ export class TicketService {
       throw new BadRequestException('ID inválido');
     }
 
+  
+    const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
+    
+  
+    if (oldTicket && req) {
+      // Eliminamos el _id interno para que el log de auditoría sea limpio
+      const { _id: _, ...safeOldData } = oldTicket as any;
+      (req as any).oldValue = safeOldData;
+    }
+
+    // ✅ 5. Realizar la actualización
     const result = await this.ticketRepository.updateOne(
       { _id: objectId },
       { $set: updateData },
@@ -175,6 +189,7 @@ export class TicketService {
       throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
     }
 
+    // ✅ 6. Retornar el registro actualizado
     return this.findTicketById(id);
   }
 
@@ -182,7 +197,8 @@ export class TicketService {
     const startOfToday = new Date().setHours(0, 0, 0, 0);
     const endOfToday = new Date().setHours(23, 59, 59, 59);
 
-    const flter = {
+    // ✅ 7. Corregido: 'filter' en lugar de 'flter'
+    const filter = {
       createdAt: {
         $gte: new Date(startOfToday),
         $lte: new Date(endOfToday),
@@ -190,19 +206,19 @@ export class TicketService {
     };
 
     const enGestion = await this.ticketRepository.count({
-      ...flter,
+      ...filter,
       status: TICKET_STATUS.EN_GESTION,
-    });
+    } as any);
 
     const casosActivos = await this.ticketRepository.count({
       ...filter,
       status: TICKET_STATUS.ACTIVO,
-    });
+    } as any);
 
     const casosCerrados = await this.ticketRepository.count({
       ...filter,
       status: TICKET_STATUS.CERRADO,
-    });
+    } as any);
 
     return {
       totalIncidencias: enGestion + casosActivos + casosCerrados,

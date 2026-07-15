@@ -56,25 +56,52 @@ export class ServiceService implements OnModuleInit {
     await this.serviceRepository.save(service);
   }
 
-  async updateService(id: string, data: any) {
+  // ✅ MÉTODO ACTUALIZADO: Agregamos 'req?: any' como parámetro opcional
+  async updateService(id: string, data: any, req?: any) {
     const { _id, ...updateData } = data;
 
     try {
+      // ✅ PASO 1: Capturar el estado actual ANTES de actualizar
+      const currentService = await this.serviceRepository.findOne({ _id: new ObjectId(id) } as any);
+         
+      
+      console.log(' [ServiceService] Servicio actual encontrado:', currentService?._id);
+    console.log('🔍 [ServiceService] ¿Existe req?', !!req);
+
+      if (currentService && req) {
+        // Eliminamos el _id interno para que el log de auditoría sea limpio y no redundante
+        const { _id: _, ...safeOldData } = currentService as any;
+        (req as any).oldValue = safeOldData;
+
+        console.log('✅ [ServiceService] oldValue asignado al request:', Object.keys(safeOldData));
+      console.log('✅ [ServiceService] req.oldValue:', (req as any).oldValue ? 'EXISTS' : 'NULL')
+      }else {
+      console.warn('⚠️ [ServiceService] No se pudo asignar oldValue');
+      console.warn('  - currentService:', !!currentService);
+      console.warn('  - req:', !!req);
+    }
+
+
+      // ✅ PASO 2: Realizar la actualización
       const result = await this.serviceRepository.updateOne(
         { _id: new ObjectId(id) },
         { $set: updateData },
       );
 
-      if (result.matchedCount === 0)
-        throw new NotFoundException('No encontrado');
-      return { success: true };
+      if (result.matchedCount === 0) {
+        throw new NotFoundException('Servicio no encontrado');
+      }
+      
+      console.log('✅ [ServiceService] Servicio actualizado correctamente');
+    return { success: true };
+     
+      
     } catch (error: any) {
+       console.error('❌ [ServiceService] Error en updateService:', error);
       if (error.code === 11000) {
         throw new ConflictException('El ID ya existe en otro servicio');
       }
-      throw new InternalServerErrorException(
-        'Error al actualizar base de datos',
-      );
+      throw new InternalServerErrorException('Error al actualizar base de datos');
     }
   }
 
@@ -125,7 +152,6 @@ export class ServiceService implements OnModuleInit {
     return results;
   }
 
-  // ✅ NUEVO MÉTODO: Actualizar servicios que no tienen proveedor
   async updateMissingProveedor(): Promise<{
     message: string;
     updated: number;

@@ -12,6 +12,7 @@ import { User } from './entities/user.entity';
 import { ObjectId } from 'mongodb';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserfilterDTO } from './dto/user-filter.dto';
+import type { Request } from 'express';
 
 
 const ROLES_VALIDOS = ['admin', 'operador', 'editor'];
@@ -29,6 +30,7 @@ export class UsersService {
     });
     if (!user) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+      
     }
     return user;
   }
@@ -147,7 +149,7 @@ export class UsersService {
     return user;
   }
 
-  async updateUser(id: string, data: any) {
+  async updateUser(id: string, data: any,  req?: Request) {
     try {
       console.log('📥 [UPDATE USER] Datos recibidos:', data);
 
@@ -155,7 +157,16 @@ export class UsersService {
         where: { _id: new ObjectId(id) as any },
       });
       if (!user) throw new NotFoundException('Usuario no encontrado');
+ if (req) {
+        // Excluimos _id, clave (password) y campos internos de MongoDB
+        const { _id, clave, __v, createdAt, updatedAt, ...safeOldData } = user as any;
+        (req as any).oldValue = safeOldData;
+        console.log('🟡 [SERVICE] oldValue asignado al req. Campos:', Object.keys(safeOldData));
+      } else {
+        console.log('🔴 [SERVICE] FALLO: No se recibió el objeto req');
+      }
 
+      
       if (!data.clave || data.clave.trim() === '') {
         delete data.clave;
       } else {

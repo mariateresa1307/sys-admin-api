@@ -1,21 +1,13 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  UseGuards,
-  Request,
-  Put,
-  Query,
-} from '@nestjs/common';
+import {  Controller,  Get,  Post,  Body,  Patch,  Param,  Delete, UseGuards, Put, Query, Req} from '@nestjs/common';
+import type { Request } from 'express';
 import { UsersService } from './users.service';
 import { UserResponseDto } from './dto/user-response.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+
+
+
 
 @Controller('user')
 @UseGuards(JwtAuthGuard) 
@@ -29,7 +21,7 @@ export class UsersController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  async getCurrentUser(@Request() req: any): Promise<UserResponseDto> {
+  async getCurrentUser(@Req() req: any): Promise<UserResponseDto> {
     const user = await this.usersService.getUserById(req.user._id);
 
     return {
@@ -71,8 +63,11 @@ async create(@Body() createUserDto: CreateUserDto) {
 }
 
   @Put(':id')
-  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return await this.usersService.updateUser(id, updateUserDto); 
+  async update(@Param('id') id: string, 
+  @Body() updateUserDto: UpdateUserDto,
+   @Req() req: Request
+) {
+    return await this.usersService.updateUser(id, updateUserDto, req); 
   }
 
   @Patch(':id/status')

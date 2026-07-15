@@ -8,6 +8,7 @@ import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { UsersService } from '../users/users.service';
 import { ObjectId } from 'mongodb';
+import { AUDIT_MODULES } from '../utils/constants/audit-modules';
 
 @Injectable()
 export class AuthService {
@@ -29,8 +30,10 @@ export class AuthService {
 
     if (!user) {
       await this.createAuditLog({
+      
         userEmail: loginDto.email,
         action: AuditAction.LOGIN_FAILED,
+         moduleId: AUDIT_MODULES.AUTH,
         ipAddress,
         userAgent,
         details: 'Usuario no encontrado',
@@ -51,6 +54,7 @@ export class AuthService {
         ipAddress,
         userAgent,
         details: 'password invalid',
+          moduleId: AUDIT_MODULES.AUTH, 
       });
       throw new UnauthorizedException('Credenciales inválidas');
     }
@@ -74,6 +78,8 @@ export class AuthService {
       ipAddress,
       userAgent,
       details: 'Login exitoso',
+      moduleId: AUDIT_MODULES.AUTH,
+      
     });
 
     return {
@@ -97,6 +103,7 @@ export class AuthService {
     ipAddress?: string;
     userAgent?: string;
     details?: string;
+    moduleId?: string;
   }): Promise<void> {
     const auditLog = this.auditLogRepository.create({
       userId: params.userId,
@@ -105,6 +112,7 @@ export class AuthService {
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
       details: params.details,
+      moduleId:params.details,
       
     });
 
