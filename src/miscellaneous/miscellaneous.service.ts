@@ -7,7 +7,7 @@ import { Miscellaneous } from './entities/miscellaneous.entity';
 import { CreateMiscellaneousDto } from './dto/create-miscellaneous.dto';
 import { UpdateMiscellaneousDto } from './dto/update-miscellaneous.dto';
 import { CategoryFilterDto } from './dto/categoryFilter.dto';
-import { AuditService } from '../audit/audit.service'; // ✅ 1. Importar AuditService
+import { AuditService } from '../audit/audit.service'; 
 import { AuditAction } from '../auth/entities/audit-log.entity';
 
 @Injectable()
@@ -192,11 +192,9 @@ export class MiscellaneousService {
       activo: item.activo,
       tipoIncidencia: item.tipoIncidencia,
       descripcion: item.descripcion,
-      // Agrega más campos si es necesario
     } : null;
   
      if (item && req) {
-      // Eliminamos campos internos de MongoDB para un log de auditoría limpio
       const { _id, __v, createdAt, updatedAt, ...safeOldData } = item as any;
       (req as any).oldValue = safeOldData;
        console.log('🟡 [SERVICE] oldValue asignado al req. Campos:', Object.keys(safeOldData));

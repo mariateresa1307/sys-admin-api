@@ -12,7 +12,7 @@ import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { TICKET_STATUS } from 'src/utils/constants/tickets';
 import { UsersService } from 'src/users/users.service';
 import { User } from 'src/users/entities/user.entity';
-import { Request } from 'express'; // ✅ 1. Importar Request
+import { Request } from 'express';
 
 @Injectable()
 export class TicketService {
@@ -89,7 +89,6 @@ export class TicketService {
           void clave;
           userMap.set(id, userWithoutPassword);
         } catch {
-          // Usuario no encontrado, se omite
         }
       }),
     );
@@ -156,7 +155,7 @@ export class TicketService {
   async updateTicket(
     id: string,
     updateTicketDto: UpdateTicketDto,
-    req?: Request, // ✅ 2. Recibir el request
+    req?: Request, 
   ): Promise<Ticket> {
     const updateData = Object.fromEntries(
       Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
@@ -174,12 +173,10 @@ export class TicketService {
     
   
     if (oldTicket && req) {
-      // Eliminamos el _id interno para que el log de auditoría sea limpio
       const { _id: _, ...safeOldData } = oldTicket as any;
       (req as any).oldValue = safeOldData;
     }
 
-    // ✅ 5. Realizar la actualización
     const result = await this.ticketRepository.updateOne(
       { _id: objectId },
       { $set: updateData },
@@ -189,7 +186,6 @@ export class TicketService {
       throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
     }
 
-    // ✅ 6. Retornar el registro actualizado
     return this.findTicketById(id);
   }
 
@@ -197,7 +193,6 @@ export class TicketService {
     const startOfToday = new Date().setHours(0, 0, 0, 0);
     const endOfToday = new Date().setHours(23, 59, 59, 59);
 
-    // ✅ 7. Corregido: 'filter' en lugar de 'flter'
     const filter = {
       createdAt: {
         $gte: new Date(startOfToday),

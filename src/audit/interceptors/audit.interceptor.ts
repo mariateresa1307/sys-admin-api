@@ -58,7 +58,6 @@ export class AuditInterceptor implements NestInterceptor {
           if (action && (user || isLogout || isLogin)) {
             const oldValue = isUpdate ? (request as any).oldValue : undefined;
 
-            // ✅ LÓGICA INTELIGENTE PARA DETALLES Y RECORD ID
             let detailsMessage = '';
             let recordIdToSave = params?.id;
 
@@ -67,23 +66,33 @@ export class AuditInterceptor implements NestInterceptor {
             } else if (isLogin) {
               detailsMessage = `Login de usuario ${userEmail || 'desconocido'}`;
             } else if (isUpdate && (module === 'TICKET' || module === 'TICKETS') && oldValue) {
-              // ✅ CORREGIDO: Acepta 'TICKET' o 'TICKETS'
+
               const caseNum = oldValue.caseNumber || 'S/N';
               const subj = oldValue.subject || 'Sin asunto';
+
               detailsMessage = `Actualización en TICKET: ${caseNum} - ${subj}`;
-              recordIdToSave = caseNum; // ✅ Guarda el Case Number en lugar del ID largo
+              recordIdToSave = caseNum; 
+
             } else if (isUpdate && (module === 'USER' || module === 'USERS') && oldValue) {
+
               const email = oldValue.email || 'S/N';
               const name = `${oldValue.primerNombre || ''} ${oldValue.primerApellido || ''}`.trim() || 'Sin nombre';
+             
               detailsMessage = `Actualización en USUARIO: ${email} - ${name}`;
+
             } else if (isUpdate && module === 'MISCELLANEOUS' && oldValue) {
+              
               const cat = oldValue.categoria || 'S/N';
               const val = oldValue.valor || 'Sin valor';
+
               detailsMessage = `Actualización en MISCELLANEOUS: ${cat} - ${val}`;
+
             } else if (isUpdate && (module === 'SERVICE' || module === 'SERVICES') && oldValue) {
+              
               const name = oldValue.name || oldValue.id_circuito || 'S/N';
               detailsMessage = `Actualización en SERVICIO: ${name}`;
             } else {
+             
               detailsMessage = `${action} en ${module}${params?.id ? ` (ID: ${params.id})` : ''}`;
             }
 
@@ -92,7 +101,7 @@ export class AuditInterceptor implements NestInterceptor {
               userEmail: userEmail || 'anonymous',
               action,
               moduleId: module,
-              recordId: recordIdToSave, // ✅ Aquí va el Case Number si es ticket
+              recordId: recordIdToSave,
               oldValue: oldValue ? JSON.stringify(oldValue) : undefined,
               newValue: (isLogin || isLogout)
                 ? JSON.stringify({ action: isLogin ? 'login' : 'logout', user: userEmail })
@@ -118,7 +127,7 @@ export class AuditInterceptor implements NestInterceptor {
   private extractModule(controllerName: string): string {
     const mapping: Record<string, string> = {
       UsersController: AUDIT_MODULES.USERS,
-      TicketController: AUDIT_MODULES.TICKETS, // ✅ Agregado para coincidir con tu controller
+      TicketController: AUDIT_MODULES.TICKETS,
       TicketsController: AUDIT_MODULES.TICKETS,
       MiscellaneousController: AUDIT_MODULES.MISCELLANEOUS,
       ServicesController: AUDIT_MODULES.SERVICES,
