@@ -1,6 +1,6 @@
 import { IsNotEmpty, IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
 
-export class CreateTicketDto {
+export class TicketDto {
   @IsString()
   @IsNotEmpty()
   caseNumber!: string;

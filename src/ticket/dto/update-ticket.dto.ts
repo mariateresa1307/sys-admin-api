@@ -1,21 +1,32 @@
-import { IsNumber, IsOptional, IsString } from 'class-validator';
+import {
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsNotEmpty,
+  IsBoolean,
+  IsArray,
+} from 'class-validator';
 
 export class UpdateTicketDto {
   @IsString()
-  @IsOptional()
-  caseNumber?: string;
+  @IsNotEmpty()
+  caseNumber!: string;
 
   @IsString()
-  @IsOptional()
-  incidentType?: string;
+  @IsNotEmpty()
+  incidentType!: string;
 
   @IsString()
-  @IsOptional()
-  subject?: string;
+  @IsNotEmpty()
+  subject!: string;
 
   @IsString()
-  @IsOptional()
-  networkCategory?: string;
+  @IsNotEmpty()
+  subcategoria!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  networkCategory!: string;
 
   @IsString()
   @IsOptional()
@@ -116,4 +127,49 @@ export class UpdateTicketDto {
   @IsNumber()
   @IsOptional()
   mttrTotal?: number;
+
+  @IsString()
+  @IsNotEmpty()
+  detalle?: string;
+
+  @IsString()
+  @IsOptional()
+  tipoCliente?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty()
+  serviciosAfectados!: string[];
+
+  @IsString()
+  @IsNotEmpty()
+  ciudad!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  estado!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  localidad!: string;
+
+  @IsString()
+  @IsOptional()
+  bitacora?: string;
+
+  @IsString()
+  @IsOptional()
+  nodo?: string;
+
+  @IsString()
+  @IsOptional()
+  abonado?: string;
+
+  @IsString()
+  @IsOptional()
+  nombreCliente?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  afectacion?: boolean;
 }

@@ -1,9 +1,9 @@
 import { Body, Controller, Get,Param, Post, Put,  Query,  UsePipes,  ValidationPipe,UseGuards
 } from '@nestjs/common';
 import { TicketService } from './ticket.service';
-import { CreateTicketDto } from './dto/create-ticket.dto';
-import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { TicketDto } from './dto/create-ticket.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UpdateTicketDto } from './dto/update-ticket.dto';
 
 @Controller('tickets')
 @UsePipes(
@@ -18,7 +18,7 @@ export class TicketController {
   constructor(private readonly ticketService: TicketService) {}
 
   @Post()
-  async create(@Body() createTicketDto: CreateTicketDto) {
+  async create(@Body() createTicketDto: TicketDto) {
     const ticket = await this.ticketService.createTicket(createTicketDto);
     return ticket;
   }
@@ -70,18 +70,7 @@ export class TicketController {
     @Body() updateTicketDto: UpdateTicketDto,
   ) {
     const ticket = await this.ticketService.updateTicket(id, updateTicketDto);
-    return {
-      _id: ticket._id.toString(),
-      caseNumber: ticket.caseNumber,
-      incidentType: ticket.incidentType,
-      subject: ticket.subject,
-      networkCategory: ticket.networkCategory,
-      description: ticket.description,
-      status: ticket.status,
-      createdAt: ticket.createdAt,
-      updatedAt: ticket.updatedAt,
-    };
+    return ticket;
+    
   }
-
-  
 }

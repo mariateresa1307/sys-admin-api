@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { MongoRepository } from 'typeorm';
 import { Ticket } from './entities/ticket.entity';
 import { ObjectId } from 'mongodb';
-import { CreateTicketDto } from './dto/create-ticket.dto';
+import { TicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { TICKET_STATUS } from 'src/utils/constants/tickets';
 import { filter } from 'rxjs';
@@ -22,7 +22,7 @@ export class TicketService {
     private readonly usersService: UsersService,
   ) {}
 
-  async createTicket(createTicketDto: CreateTicketDto): Promise<Ticket> {
+  async createTicket(createTicketDto: TicketDto): Promise<Ticket> {
     const newTicket = this.ticketRepository.create(createTicketDto);
     return await this.ticketRepository.save(newTicket);
   }
