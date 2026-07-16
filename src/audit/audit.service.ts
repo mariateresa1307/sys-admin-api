@@ -1,4 +1,3 @@
-// src/audit/audit.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MongoRepository } from 'typeorm';
@@ -16,12 +15,6 @@ export class AuditService {
   ) {}
 
   async createLog(dto: CreateAuditLogDto): Promise<AuditLog> {
-
-     console.log('📥 [AuditService] createLog llamado con:');
-  console.log('  - moduleId:', dto.moduleId);
-  console.log('  - action:', dto.tipoAccion || dto.action);
-  console.log('  - DTO completo:', dto);
-
     const auditLogData: any = {
       userId: dto.userId ? new ObjectId(dto.userId) : null,
       userEmail: dto.userEmail || null,
@@ -33,23 +26,13 @@ export class AuditService {
       macAddress: dto.macAddress,
       sourceApplication: dto.sourceApplication,
       recordId: dto.recordId,
-      eventDate: dto.fecha ? new Date(dto.fecha) : undefined,
+      eventDate: dto.fecha ? new Date(dto.fecha) : new Date(),
       details: dto.details,
       userAgent: (dto as any).userAgent,
     };
-     console.log('💾 [AuditService] Datos a guardar:', auditLogData);
 
-  const auditLog = this.auditLogRepository.create(auditLogData) as AuditLog;
-  const saved = await this.auditLogRepository.save(auditLog);
-
-console.log('✅ [AuditService] Log guardado exitosamente:');
-  console.log('  - _id:', saved._id);
-  console.log('  - userEmail:', saved.userEmail);
-  console.log('  - userId:', saved.userId);
-
-
-  return saved;
-   // return await this.auditLogRepository.save(auditLog);
+    const auditLog = this.auditLogRepository.create(auditLogData) as AuditLog;
+    return await this.auditLogRepository.save(auditLog);
   }
 
   private buildQuery(filterDto: AuditFilterDto): any {
@@ -60,32 +43,62 @@ console.log('✅ [AuditService] Log guardado exitosamente:');
     if (filterDto.moduleId) query.moduleId = filterDto.moduleId;
 
     if (filterDto.startDate || filterDto.endDate) {
-      query.eventDate = {};
-      if (filterDto.startDate) query.eventDate.$gte = new Date(filterDto.startDate);
+      const dateConditions: any[] = [];
+      
+      const eventDateCondition: any = {};
+      if (filterDto.startDate) eventDateCondition.$gte = new Date(filterDto.startDate);
       if (filterDto.endDate) {
         const end = new Date(filterDto.endDate);
         end.setHours(23, 59, 59, 999);
-        query.eventDate.$lte = end;
+        eventDateCondition.$lte = end;
       }
+      dateConditions.push({ eventDate: eventDateCondition });
+
+      const createdAtCondition: any = {};
+      if (filterDto.startDate) createdAtCondition.$gte = new Date(filterDto.startDate);
+      if (filterDto.endDate) {
+        const end = new Date(filterDto.endDate);
+        end.setHours(23, 59, 59, 999);
+        createdAtCondition.$lte = end;
+      }
+      dateConditions.push({ createdAt: createdAtCondition });
+
+      query.$or = dateConditions;
     }
+    
     return query;
   }
 
-  async findAll(filterDto: AuditFilterDto) {
-    const query = this.buildQuery(filterDto);
-    const page = Number(filterDto.page) || 1;
-    const limit = Number(filterDto.limit) || 20;
-    const skip = (page - 1) * limit;
+  private formatDateManual(date: Date): string {
+    const pad = (value: number) => value.toString().padStart(2, '0');
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
 
-    const [data, total] = await Promise.all([
-      this.auditLogRepository.find({
-        where: query,
-        order: { eventDate: 'DESC' },
-        skip,
-        take: limit,
-      }),
-      this.auditLogRepository.count({ where: query }),
-    ]);
+  async findAll(filterDto: AuditFilterDto) {
+    console.log('🔍 [Backend] 1. filterDto recibido:', filterDto);
+
+    const page = Number(filterDto.page) || 1;
+    const limit = Number(filterDto.limit) || 10;
+    const skip = (page - 1) * limit;
+    
+    const query = this.buildQuery(filterDto);
+    console.log('🔍 [Backend] Query construida para MongoDB:', JSON.stringify(query));
+
+    const data = await this.auditLogRepository.find({
+      where: query,
+      order: { eventDate: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    const countResult = await this.auditLogRepository.aggregate([
+      { $match: query },
+      { $count: 'total' }
+    ]).toArray();
+
+    const total = countResult.length > 0 ? countResult[0].total : 0;
+
+    console.log('🔍 [Backend] Resultados: total =', total, ', data.length =', data.length);
 
     return {
       data,
@@ -96,91 +109,182 @@ console.log('✅ [AuditService] Log guardado exitosamente:');
     };
   }
 
-  async getStats(filterDto: AuditFilterDto) {
-    const query = this.buildQuery(filterDto);
+  async getStats(filterDto?: AuditFilterDto) {
+    const query: any = filterDto ? this.buildQuery(filterDto) : {};
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
-    const [total, byAction] = await Promise.all([
-      this.auditLogRepository.count({ where: query }),
-      this.auditLogRepository
-        .aggregate([
-          ...(Object.keys(query).length > 0 ? [{ $match: query }] : []),
-          { $group: { _id: '$action', count: { $sum: 1 } } },
-        ])
-        .toArray(),
-    ]);
+    const aggregationResult = await this.auditLogRepository.aggregate([
+      { $match: query },
+      {
+        $facet: {
+          actionCounts: [{ $group: { _id: '$action', count: { $sum: 1 } } }],
+          uniqueUsers: [
+            { $match: { action: 'LOGIN', userEmail: { $nin: [null, ''] } } },
+            { $group: { _id: '$userEmail' } },
+            { $count: 'count' }
+          ],
+          todayLogs: [
+            { $match: { eventDate: { $gte: startOfDay, $lte: endOfDay } } },
+            { $count: 'count' }
+          ]
+        }
+      }
+    ]).toArray();
 
-    const actionMap = byAction.reduce((acc, curr) => {
-      acc[curr._id as string] = curr.count;
+    const facetData = aggregationResult[0] || { actionCounts: [], uniqueUsers: [], todayLogs: [] };
+    const actionMap = facetData.actionCounts.reduce((acc: Record<string, number>, curr: any) => {
+      acc[curr._id] = curr.count;
       return acc;
-    }, {} as Record<string, number>);
+    }, {});
 
     return {
-      total,
-      ediciones: (actionMap[AuditAction.UPDATE] || 0) + (actionMap[AuditAction.CREATE] || 0),
-      eliminados: actionMap[AuditAction.DELETE] || 0,
-      usuarios: actionMap[AuditAction.LOGIN] || 0,
-      incidentes: actionMap[AuditAction.LOGIN_FAILED] || 0,
-      historial: total,
+      ediciones: (actionMap['UPDATE'] || 0) + (actionMap['CREATE'] || 0),
+      eliminados: actionMap['DELETE'] || 0,
+      usuarios: facetData.uniqueUsers.length > 0 ? facetData.uniqueUsers[0].count : 0,
+      historial: facetData.todayLogs.length > 0 ? facetData.todayLogs[0].count : 0,
     };
   }
-
+  // ✅ MÉTODO DE EXPORTACIÓN CON DISEÑO CORPORATIVO NETUNO (CORREGIDO)
   async exportLogsToExcel(filterDto: AuditFilterDto): Promise<Buffer> {
     const query = this.buildQuery(filterDto);
-    const logs = await this.auditLogRepository.find({
-      where: query,
-      order: { eventDate: 'DESC' },
+    const logs = await this.auditLogRepository.find({ 
+      where: query, 
+      order: { createdAt: 'DESC' } 
     });
+
+    console.log(`📊 [Excel] Exportando ${logs.length} registros con diseño corporativo...`);
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Sistema NOC';
+    workbook.creator = 'Noc HelpDesk';
     workbook.created = new Date();
+    (workbook.properties as any).title = 'Reporte de Auditoría de Sistema';
+    (workbook.properties as any).company = 'NetUno C.A. - RIF: J-30108335-0';
+    
     const worksheet = workbook.addWorksheet('Auditoría', {
-      properties: { defaultRowHeight: 20 },
+      properties: { defaultRowHeight: 20, defaultColWidth: 15 },
+      pageSetup: {
+        paperSize: 9, // A4
+        orientation: 'landscape',
+        fitToPage: true,
+        fitToWidth: 1,
+        margins: { left: 0.7, right: 0.7, top: 1.0, bottom: 1.0, header: 0.5, footer: 0.5 }
+      }
     });
 
-    worksheet.columns = [
-      { header: 'Fecha', key: 'eventDate', width: 22 },
-      { header: 'Usuario', key: 'userEmail', width: 30 },
-      { header: 'Acción', key: 'action', width: 16 },
-      { header: 'Módulo', key: 'module', width: 18 },
-      { header: 'IP', key: 'ipAddress', width: 16 },
-      { header: 'Valor Anterior', key: 'oldValue', width: 32 },
-      { header: 'Valor Nuevo', key: 'newValue', width: 32 },
-      { header: 'Detalles', key: 'details', width: 40 },
-    ];
+    // ✅ 1. HEADER CORPORATIVO
+    worksheet.mergeCells('A1:F1');
+    const headerRow1 = worksheet.getRow(1);
+    headerRow1.height = 40;
+    headerRow1.getCell(1).value = 'NOC'; 
+    headerRow1.getCell(1).font = { 
+      bold: true, 
+      size: 22, 
+      color: { argb: 'FF121227' }, // Azul Marino Pantone 532C
+      name: 'Calibri'
+    };
+    headerRow1.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
+    headerRow1.getCell(1).border = {
+      bottom: { style: 'thick', color: { argb: 'FF6BB1E2' } } // Azul Celeste Pantone 284C
+    };
 
-    const headerRow = worksheet.getRow(1);
-    headerRow.height = 28;
-    headerRow.eachCell((cell) => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF080769' } };
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    worksheet.mergeCells('A2:F2');
+    const headerRow2 = worksheet.getRow(2);
+    headerRow2.height = 30;
+    headerRow2.getCell(1).value = 'REPORTE DE AUDITORÍA DE SISTEMA'; // ✅ CORREGIDO
+    headerRow2.getCell(1).font = { 
+      bold: true, 
+      size: 14, 
+      color: { argb: 'FF6BB1E2' }, // Azul Celeste
+      name: 'Calibri'
+    };
+    headerRow2.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
+
+    worksheet.mergeCells('A3:F3');
+    const headerRow3 = worksheet.getRow(3);
+    headerRow3.height = 25;
+    const generatedDate = new Date().toLocaleString('es-VE', { dateStyle: 'long', timeStyle: 'short' });
+    headerRow3.getCell(1).value = `Generado: ${generatedDate} | Total de Registros: ${logs.length}`; // ✅ CORREGIDO
+    headerRow3.getCell(1).font = { 
+      italic: true, 
+      size: 10, 
+      color: { argb: 'FF808080' }, // Gris
+      name: 'Calibri'
+    };
+    headerRow3.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
+
+    // Espacio antes de la tabla
+    worksheet.addRow([]);
+    
+    // ✅ 2. ENCABEZADOS DE TABLA
+    const headersRow = worksheet.addRow([
+      'FECHA / HORA',
+      'USUARIO',
+      'ACCIÓN',
+      'MÓDULO',
+      'IP',
+      'DETALLES'
+    ]);
+    
+    headersRow.height = 30;
+    headersRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF121227' } }; // Azul Marino
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Calibri' }; // Calibri Bold, Blanco
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       cell.border = {
-        top: { style: 'thin' }, bottom: { style: 'thin' },
-        left: { style: 'thin' }, right: { style: 'thin' },
+        top: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+        bottom: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+        left: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+        right: { style: 'thin', color: { argb: 'FFFFFFFF' } },
       };
     });
 
+    // ✅ 3. COLORES CORPORATIVOS PARA ACCIONES (Tonos suaves para máxima legibilidad)
     const actionColors: Record<string, string> = {
-      LOGIN: 'FFE8F5E9', LOGIN_FAILED: 'FFFFEBEE', LOGOUT: 'FFF5F5F5',
-      CREATE: 'FFE3F2FD', UPDATE: 'FFFFF9C4', DELETE: 'FFFFCDD2',
-      EXPORT: 'FFE0F2F1',
+      LOGIN: 'FFD4EDD9',        // Verde suave (derivado de Verde Lima)
+      LOGOUT: 'FFF0F4F8',       // Gris azulado muy claro
+      LOGIN_FAILED: 'FFF8D7DA', // Rojo suave (derivado de Rojo Ladrillo)
+      CREATE: 'FFD1ECF1',       // Azul claro (derivado de Azul Celeste)
+      UPDATE: 'FFFFF3CD',       // Amarillo suave (derivado de Amarillo Miel)
+      DELETE: 'FFF5C6CB',       // Rojo suave
+      EXPORT: 'FFD1F2EB',       // Turquesa suave
     };
 
-    logs.forEach((log, index) => {
-      const row = worksheet.addRow({
-        eventDate: log.eventDate
-          ? new Intl.DateTimeFormat('es-VE', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(log.eventDate))
-          : '',
-        userEmail: log.userEmail || '',
-        action: log.action,
-        module: log.moduleId || '',
-        ipAddress: log.ipAddress || '',
-        oldValue: log.oldValue || '',
-        newValue: log.newValue || '',
-        details: log.details || '',
-      });
+    // ✅ 4. DATOS DE LA TABLA
+    logs.forEach((log: any, index) => {
+      let formattedDate = 'SIN REGISTRO';
+      
+      // Nivel 1: eventDate
+      if (log.eventDate) {
+        const dateObj = new Date(log.eventDate);
+        if (!isNaN(dateObj.getTime())) formattedDate = this.formatDateManual(dateObj);
+      }
+      // Nivel 2: createdAt
+      if (formattedDate === 'SIN REGISTRO' && log.createdAt) {
+        const dateObj = new Date(log.createdAt);
+        if (!isNaN(dateObj.getTime())) formattedDate = this.formatDateManual(dateObj);
+      }
+      // Nivel 3: ObjectId timestamp (Infalible)
+      if (formattedDate === 'SIN REGISTRO' && log._id) {
+        try {
+          const objectIdTimestamp = new ObjectId(log._id).getTimestamp();
+          formattedDate = this.formatDateManual(objectIdTimestamp);
+        } catch (error) {
+          // Fallback final
+        }
+      }
 
+      const row = worksheet.addRow([
+        formattedDate,
+        log.userEmail || 'Sistema',
+        log.action || 'DESCONOCIDA',
+        log.moduleId || log.module || 'GENERAL',
+        log.ipAddress || 'N/A',
+        log.details || '',
+      ]);
+
+      row.height = 25;
       row.eachCell((cell, colNumber) => {
         cell.border = {
           top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
@@ -189,13 +293,17 @@ console.log('✅ [AuditService] Log guardado exitosamente:');
           right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
         };
         cell.alignment = { vertical: 'middle', wrapText: true };
+        cell.font = { name: 'Calibri', size: 10 }; // Calibri Regular
+
+        // Resaltar columna de Acción
         if (colNumber === 3) {
           const actionKey = log.action || '';
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: actionColors[actionKey] || 'FFFFFFFF' } };
-          cell.font = { bold: true };
+          cell.font = { bold: true, name: 'Calibri', size: 10 }; // Calibri Bold
         }
       });
 
+      // Filas alternadas (Zebra striping) para mejor legibilidad
       if (index % 2 === 0) {
         row.eachCell((cell, colNumber) => {
           if (colNumber !== 3) {
@@ -205,15 +313,39 @@ console.log('✅ [AuditService] Log guardado exitosamente:');
       }
     });
 
+    // ✅ 5. FOOTER CORPORATIVO
     worksheet.addRow([]);
-    const summaryRow = worksheet.addRow([
-      `Total de registros: ${logs.length} | Generado el: ${new Intl.DateTimeFormat('es-VE', {
-        dateStyle: 'long', timeStyle: 'medium',
-      }).format(new Date())}`,
-    ]);
-    worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, 8);
-    summaryRow.getCell(1).font = { italic: true, color: { argb: 'FF64748B' } };
-    summaryRow.getCell(1).alignment = { horizontal: 'center' };
+    const footerRow = worksheet.addRow(['']);
+    footerRow.height = 30;
+    
+    const footerNumber = footerRow.number;
+    worksheet.mergeCells(`A${footerNumber}:F${footerNumber}`);
+    footerRow.getCell(1).value = 'NetUno C.A. - RIF: J-30108335-0 | Documento generado automáticamente por el Sistema de Auditoría'; // ✅ CORREGIDO
+    footerRow.getCell(1).font = { italic: true, size: 9, color: { argb: 'FF808080' }, name: 'Calibri' };
+    footerRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    footerRow.getCell(1).border = {
+      top: { style: 'thin', color: { argb: 'FF6BB1E2' } } // Línea Azul Celeste
+    };
+
+    // ✅ 6. AJUSTE AUTOMÁTICO DE COLUMNAS
+    worksheet.columns.forEach((column, index) => {
+      if (column) {
+        let maxLength = 0;
+        const maxWidths = [22, 35, 20, 20, 18, 60]; // Anchos máximos recomendados
+        
+        column.eachCell?.({ includeEmpty: true }, (cell) => {
+          const columnLength = cell.value ? cell.value.toString().length : 10;
+          if (columnLength > maxLength) {
+            maxLength = columnLength;
+          }
+        });
+        
+        column.width = Math.min(Math.max(maxLength + 2, 15), maxWidths[index] || 60);
+      }
+    });
+
+    // ✅ 7. CONGELAR PANELES (Mantener encabezado visible al hacer scroll)
+    worksheet.views = [{ state: 'frozen', ySplit: 5 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer as unknown as Buffer;

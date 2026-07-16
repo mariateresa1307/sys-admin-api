@@ -6,7 +6,7 @@ import { CreateAuditLogDto } from './dto/create-audit-log.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('audit')
-@UseGuards(JwtAuthGuard) // ✅ Solo requiere autenticación
+@UseGuards(JwtAuthGuard) 
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
