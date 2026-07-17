@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MongoRepository } from 'typeorm';
@@ -13,6 +14,7 @@ import { TICKET_STATUS } from 'src/utils/constants/tickets';
 import { UsersService } from 'src/users/users.service';
 import { User } from 'src/users/entities/user.entity';
 import { Request } from 'express';
+import { AuditLog } from '../auth/entities/audit-log.entity';
 
 @Injectable()
 export class TicketService {
@@ -20,6 +22,8 @@ export class TicketService {
     @InjectRepository(Ticket)
     private readonly ticketRepository: MongoRepository<Ticket>,
     private readonly usersService: UsersService,
+    @InjectRepository(AuditLog)
+    private readonly auditLogRepository: MongoRepository<AuditLog>,
   ) {}
 
   async createTicket(createTicketDto: TicketDto): Promise<Ticket> {
@@ -89,6 +93,7 @@ export class TicketService {
           void clave;
           userMap.set(id, userWithoutPassword);
         } catch {
+          // Ignorar errores de usuario no encontrado
         }
       }),
     );
@@ -151,7 +156,6 @@ export class TicketService {
     return ticket;
   }
 
- 
   async updateTicket(
     id: string,
     updateTicketDto: UpdateTicketDto,
@@ -168,10 +172,8 @@ export class TicketService {
       throw new BadRequestException('ID inválido');
     }
 
-  
     const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
     
-  
     if (oldTicket && req) {
       const { _id: _, ...safeOldData } = oldTicket as any;
       (req as any).oldValue = safeOldData;
@@ -189,31 +191,164 @@ export class TicketService {
     return this.findTicketById(id);
   }
 
-  async stats() {
-    const startOfToday = new Date().setHours(0, 0, 0, 0);
-    const endOfToday = new Date().setHours(23, 59, 59, 59);
+  // ✅ NUEVO: Cerrar Ticket
+  async closeTicket(id: string, req?: Request): Promise<Ticket> {
+    let objectId: ObjectId;
+    try {
+      objectId = new ObjectId(id);
+    } catch {
+      throw new BadRequestException('ID inválido');
+    }
 
-    const filter = {
-      createdAt: {
-        $gte: new Date(startOfToday),
-        $lte: new Date(endOfToday),
-      },
+    const ticket = await this.ticketRepository.findOne({ _id: objectId } as any);
+    if (!ticket) {
+      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
+    }
+
+   const updateData = {
+    status: TICKET_STATUS.CERRADO,
+    horaCierreFalla: new Date(), // ✅ Fecha y hora actual
+  };
+
+    await this.ticketRepository.updateOne(
+      { _id: objectId },
+      { $set: updateData },
+    );
+
+    // Registrar en auditoría
+    if (req) {
+      const userData = (req as any).user;
+      await this.createAuditLog(
+        id,
+        'TICKET',
+        'UPDATE',
+        userData,
+        { status: ticket.status },
+      { status: TICKET_STATUS.CERRADO, horaCierreFalla: updateData.horaCierreFalla },
+        req,
+      `Ticket ${ticket.caseNumber} cerrado por ${userData?.userEmail || 'usuario'}`,
+      );
+    }
+
+    return this.findTicketById(id);
+  }
+
+  // ✅ NUEVO: Reabrir Ticket (Solo Admin)
+  async reopenTicket(id: string, req?: Request): Promise<Ticket> {
+    let objectId: ObjectId;
+    try {
+      objectId = new ObjectId(id);
+    } catch {
+      throw new BadRequestException('ID inválido');
+    }
+
+    const ticket = await this.ticketRepository.findOne({ _id: objectId } as any);
+    if (!ticket) {
+      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
+    }
+
+    const userData = (req as any).user;
+    // ✅ Validación estricta de rol de administrador
+    if (!userData || userData.isAdmin !== true && userData.role !== 'admin') {
+      throw new ForbiddenException('Solo los administradores pueden reabrir tickets');
+    }
+
+    const updateData = {
+      status: TICKET_STATUS.ACTIVO,
     };
 
+    await this.ticketRepository.updateOne(
+      { _id: objectId },
+      { $set: updateData },
+    );
+
+    // Registrar en auditoría
+    if (req) {
+      await this.createAuditLog(
+        id,
+        'TICKET',
+        'UPDATE',
+        userData,
+        { status: ticket.status },
+        { status: TICKET_STATUS.ACTIVO },
+        req,
+        `Ticket ${ticket.caseNumber} reabierto por admin ${userData?.userEmail || 'usuario'}`,
+      );
+    }
+
+    return this.findTicketById(id);
+  }
+
+  // ✅ Helper para crear logs de auditoría
+  private async createAuditLog(
+    recordId: string,
+    moduleId: string,
+    action: string,
+    user: any,
+    oldValue: any,
+    newValue: any,
+    req: Request,
+    details: string,
+  ) {
+    try {
+      const auditData = {
+        userId: user?._id ? new ObjectId(user._id) : undefined,
+        userEmail: user?.userEmail || undefined,
+        action,
+        moduleId,
+        oldValue: oldValue ? JSON.stringify(oldValue) : undefined,
+        newValue: newValue ? JSON.stringify(newValue) : undefined,
+        ipAddress: req.ip,
+        recordId,
+        eventDate: new Date(),
+        details,
+      };
+      const auditLog = this.auditLogRepository.create(auditData);
+      await this.auditLogRepository.save(auditLog);
+    } catch (error) {
+      console.error('❌ Error creando log de auditoría:', error);
+    }
+  }
+
+  async stats() {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const endOfMonth = new Date();
+    endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+    endOfMonth.setDate(0);
+    endOfMonth.setHours(23, 59, 59, 999);
+
+    const totalIncidencias = await this.ticketRepository.count({
+      createdAt: {
+        $gte: startOfToday,
+        $lte: endOfToday,
+      },
+    } as any);
+
     const enGestion = await this.ticketRepository.count({
-      ...filter,
       status: TICKET_STATUS.EN_GESTION,
     } as any);
 
     const casosActivos = await this.ticketRepository.count({
-      ...filter,
       status: TICKET_STATUS.ACTIVO,
     } as any);
 
-    const casosCerrados = await this.ticketRepository.count({
-      ...filter,
-      status: TICKET_STATUS.CERRADO,
-    } as any);
+   const casosCerrados = await this.ticketRepository.count({
+    status: TICKET_STATUS.CERRADO,
+   /* horaCierreFalla: {
+      $gte: startOfToday,
+      $lte: endOfToday,
+    },*/
+  } as any);
+
 
     return {
       totalIncidencias: enGestion + casosActivos + casosCerrados,

@@ -1,4 +1,4 @@
-import {  Body, Controller,  Get,  Param,  Post,  Put, Query,  UsePipes, ValidationPipe,  UseGuards, Req 
+import {  Body, Controller,  Get,  Param,  Post, Patch,  Put, Query,  UsePipes, ValidationPipe,  UseGuards, Req 
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { TicketService } from './ticket.service';
@@ -71,8 +71,24 @@ export class TicketController {
     @Body() updateTicketDto: UpdateTicketDto,
     @Req() req: Request 
   ) {
-    // ✅ 4. Pasarlo al servicio
+
     const ticket = await this.ticketService.updateTicket(id, updateTicketDto, req);
     return ticket;
+  }
+
+    @Put(':id/close')
+  async closeTicket(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ) {
+    return this.ticketService.closeTicket(id, req);
+  }
+
+  @Put(':id/reopen')
+  async reopenTicket(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ) {
+    return this.ticketService.reopenTicket(id, req);
   }
 }

@@ -5,9 +5,11 @@ import { TicketService } from './ticket.service';
 import { TicketController } from './ticket.controller';
 import { User } from 'src/users/entities/user.entity';
 import { UsersModule } from 'src/users/users.module';
+import { AuditLog } from '../auth/entities/audit-log.entity';
+
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Ticket, User]), UsersModule],
+  imports: [TypeOrmModule.forFeature([Ticket, User, AuditLog]), UsersModule],
   providers: [TicketService],
   controllers: [TicketController],
   exports: [TicketService, TypeOrmModule],
