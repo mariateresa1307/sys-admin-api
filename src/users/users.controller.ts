@@ -79,6 +79,7 @@ async create(@Body() createUserDto: CreateUserDto) {
   }
 
   @Delete(':id')
+  //@HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Param('id') id: string) {
     return await this.usersService.remove(id);
   }

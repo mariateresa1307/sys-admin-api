@@ -206,4 +206,20 @@ export class UsersService {
     const user = await this.getUserById(id);
     return user.role;
   }
+
+  async deleteUser(id: string): Promise<void> {
+    let objectId: ObjectId;
+    try {
+      objectId = new ObjectId(id);
+    } catch {
+      throw new BadRequestException('ID de usuario inválido');
+    }
+
+    const result = await this.userRepository.delete({ _id: objectId } as any);
+    
+    if (result.affected === 0) {
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+    }
+  }
+
 }

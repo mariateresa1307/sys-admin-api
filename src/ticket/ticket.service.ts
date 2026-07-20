@@ -39,12 +39,15 @@ export class TicketService {
       caseNumber?: string;
       subject?: string;
       status?: string;
+      excludeStatus?: string; 
       primerNombre?: string;
+      operatorId?: string;
     } = {},
   ) {
     const take = limit > 0 ? limit : 10;
     const skip = page > 1 ? (page - 1) * take : 0;
     const where = this.buildSearchFilter(filters);
+    
     const findOptions: Record<string, unknown> = {
       skip,
       take,
@@ -62,8 +65,25 @@ export class TicketService {
 
     const enrichedData = await this.enrichTicketsWithUsers(data);
 
+    const statusOrder: Record<string, number> = {
+      [TICKET_STATUS.EN_GESTION ]: 1,
+      [TICKET_STATUS.ACTIVO]: 2,
+      [TICKET_STATUS.CERRADO]: 3,
+    };
+
+    const sortedData = enrichedData.sort((a: any, b: any) => {
+      const orderA = statusOrder[a.status] || 999;
+      const orderB = statusOrder[b.status] || 999;
+
+      if (orderA === orderB) {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+
+      return orderA - orderB;
+    });
+
     return {
-      data: enrichedData,
+      data: sortedData,
       total,
       page,
       limit: take,
@@ -75,12 +95,8 @@ export class TicketService {
     const userIds = new Set<string>();
 
     for (const ticket of tickets) {
-      if (ticket.operatorAsignado) {
-        userIds.add(ticket.operatorAsignado);
-      }
-      if (ticket.operatorResponsable) {
-        userIds.add(ticket.operatorResponsable);
-      }
+      if (ticket.operatorAsignado) userIds.add(ticket.operatorAsignado);
+      if (ticket.operatorResponsable) userIds.add(ticket.operatorResponsable);
     }
 
     const userMap = new Map<string, Omit<User, 'clave'>>();
@@ -113,7 +129,9 @@ export class TicketService {
     caseNumber?: string;
     subject?: string;
     status?: string;
+    excludeStatus?: string; 
     primerNombre?: string;
+    operatorId?: string;
   }) {
     const where: Record<string, unknown> = {};
 
@@ -125,8 +143,18 @@ export class TicketService {
       where.subject = { $regex: filters.subject.trim(), $options: 'i' };
     }
 
+    // ✅ 3. AGREGADO: Lógica real para filtrar o excluir estados
     if (filters.status?.trim()) {
       where.status = filters.status.trim();
+    } else if (filters.excludeStatus?.trim()) {
+      where.status = { $ne: filters.excludeStatus.trim() }; // $ne = Not Equal (Diferente de)
+    }
+
+    if (filters.operatorId?.trim()) {
+      where.$or = [
+        { operatorAsignado: filters.operatorId.trim() },
+        { operatorResponsable: filters.operatorId.trim() },
+      ];
     }
 
     if (filters.primerNombre?.trim()) {
@@ -191,7 +219,6 @@ export class TicketService {
     return this.findTicketById(id);
   }
 
-  // ✅ NUEVO: Cerrar Ticket
   async closeTicket(id: string, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
     try {
@@ -205,17 +232,16 @@ export class TicketService {
       throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
     }
 
-   const updateData = {
-    status: TICKET_STATUS.CERRADO,
-    horaCierreFalla: new Date(), // ✅ Fecha y hora actual
-  };
+    const updateData = {
+      status: TICKET_STATUS.CERRADO,
+      horaCierreFalla: new Date(),
+    };
 
     await this.ticketRepository.updateOne(
       { _id: objectId },
       { $set: updateData },
     );
 
-    // Registrar en auditoría
     if (req) {
       const userData = (req as any).user;
       await this.createAuditLog(
@@ -224,16 +250,15 @@ export class TicketService {
         'UPDATE',
         userData,
         { status: ticket.status },
-      { status: TICKET_STATUS.CERRADO, horaCierreFalla: updateData.horaCierreFalla },
+        { status: TICKET_STATUS.CERRADO, horaCierreFalla: updateData.horaCierreFalla },
         req,
-      `Ticket ${ticket.caseNumber} cerrado por ${userData?.userEmail || 'usuario'}`,
+        `Ticket ${ticket.caseNumber} cerrado por ${userData?.userEmail || 'usuario'}`,
       );
     }
 
     return this.findTicketById(id);
   }
 
-  // ✅ NUEVO: Reabrir Ticket (Solo Admin)
   async reopenTicket(id: string, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
     try {
@@ -248,8 +273,8 @@ export class TicketService {
     }
 
     const userData = (req as any).user;
-    // ✅ Validación estricta de rol de administrador
-    if (!userData || userData.isAdmin !== true && userData.role !== 'admin') {
+    
+    if (!userData || (userData.isAdmin !== true && userData.role !== 'admin')) {
       throw new ForbiddenException('Solo los administradores pueden reabrir tickets');
     }
 
@@ -262,7 +287,6 @@ export class TicketService {
       { $set: updateData },
     );
 
-    // Registrar en auditoría
     if (req) {
       await this.createAuditLog(
         id,
@@ -279,7 +303,6 @@ export class TicketService {
     return this.findTicketById(id);
   }
 
-  // ✅ Helper para crear logs de auditoría
   private async createAuditLog(
     recordId: string,
     moduleId: string,
@@ -317,15 +340,6 @@ export class TicketService {
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
 
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const endOfMonth = new Date();
-    endOfMonth.setMonth(endOfMonth.getMonth() + 1);
-    endOfMonth.setDate(0);
-    endOfMonth.setHours(23, 59, 59, 999);
-
     const totalIncidencias = await this.ticketRepository.count({
       createdAt: {
         $gte: startOfToday,
@@ -341,14 +355,9 @@ export class TicketService {
       status: TICKET_STATUS.ACTIVO,
     } as any);
 
-   const casosCerrados = await this.ticketRepository.count({
-    status: TICKET_STATUS.CERRADO,
-   /* horaCierreFalla: {
-      $gte: startOfToday,
-      $lte: endOfToday,
-    },*/
-  } as any);
-
+    const casosCerrados = await this.ticketRepository.count({
+      status: TICKET_STATUS.CERRADO,
+    } as any);
 
     return {
       totalIncidencias: enGestion + casosActivos + casosCerrados,
