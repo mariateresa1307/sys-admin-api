@@ -15,6 +15,7 @@ import { UsersService } from 'src/users/users.service';
 import { User } from 'src/users/entities/user.entity';
 import { Request } from 'express';
 import { AuditLog } from '../auth/entities/audit-log.entity';
+import { Miscellaneous } from '../miscellaneous/entities/miscellaneous.entity';
 
 @Injectable()
 export class TicketService {
@@ -24,6 +25,8 @@ export class TicketService {
     private readonly usersService: UsersService,
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: MongoRepository<AuditLog>,
+    @InjectRepository(Miscellaneous)
+    private readonly miscellaneousRepository: MongoRepository<Miscellaneous>,
   ) {}
 
   async createTicket(createTicketDto: TicketDto): Promise<Ticket> {
@@ -66,7 +69,7 @@ export class TicketService {
     const enrichedData = await this.enrichTicketsWithUsers(data);
 
     const statusOrder: Record<string, number> = {
-      [TICKET_STATUS.EN_GESTION ]: 1,
+      [TICKET_STATUS.EN_GESTION]: 1,
       [TICKET_STATUS.ACTIVO]: 2,
       [TICKET_STATUS.CERRADO]: 3,
     };
@@ -143,11 +146,10 @@ export class TicketService {
       where.subject = { $regex: filters.subject.trim(), $options: 'i' };
     }
 
-    // ✅ 3. AGREGADO: Lógica real para filtrar o excluir estados
     if (filters.status?.trim()) {
       where.status = filters.status.trim();
     } else if (filters.excludeStatus?.trim()) {
-      where.status = { $ne: filters.excludeStatus.trim() }; // $ne = Not Equal (Diferente de)
+      where.status = { $ne: filters.excludeStatus.trim() };
     }
 
     if (filters.operatorId?.trim()) {
@@ -184,6 +186,7 @@ export class TicketService {
     return ticket;
   }
 
+  // ✅ MODIFICADO: Ahora enriquece oldValue y newValue con nombres legibles
   async updateTicket(
     id: string,
     updateTicketDto: UpdateTicketDto,
@@ -203,8 +206,8 @@ export class TicketService {
     const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
     
     if (oldTicket && req) {
-      const { _id: _, ...safeOldData } = oldTicket as any;
-      (req as any).oldValue = safeOldData;
+      // ✅ Enriquecer oldValue con nombres legibles para la auditoría
+      (req as any).oldValue = await this.enrichTicketForAudit(oldTicket);
     }
 
     const result = await this.ticketRepository.updateOne(
@@ -216,7 +219,14 @@ export class TicketService {
       throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
     }
 
-    return this.findTicketById(id);
+    const updatedTicket = await this.findTicketById(id);
+
+    if (req) {
+      // ✅ Enriquecer newValue con nombres legibles para la auditoría
+      (req as any).newValue = await this.enrichTicketForAudit(updatedTicket);
+    }
+
+    return updatedTicket;
   }
 
   async closeTicket(id: string, req?: Request): Promise<Ticket> {
@@ -331,6 +341,62 @@ export class TicketService {
     } catch (error) {
       console.error('❌ Error creando log de auditoría:', error);
     }
+  }
+
+  // ✅ NUEVO MÉTODO: Convierte IDs en nombres legibles para el log de auditoría
+  private async enrichTicketForAudit(ticket: any) {
+    if (!ticket) return null;
+    const enriched = { ...ticket };
+
+    // Helper para obtener nombre de Miscellaneous
+    const getMiscName = async (id: string) => {
+      if (!id || typeof id !== 'string') return id;
+      try {
+        const item = await this.miscellaneousRepository.findOne({ _id: new ObjectId(id) } as any);
+        return item?.valor || id;
+      } catch {
+        return id;
+      }
+    };
+
+    // Helper para obtener nombre de Usuario
+    const getUserName = async (id: string) => {
+      if (!id || typeof id !== 'string') return id;
+      try {
+        const user = await this.usersService.findUserById(id);
+        return user ? `${user.primerNombre || ''} ${user.primerApellido || ''}`.trim() || user.username || id : id;
+      } catch {
+        return id;
+      }
+    };
+
+    // 1. Campos que son referencias a Miscellaneous
+    const miscFields = [
+      'networkCategory', 'subcategoria', 'detalle', 'tipoCliente', 
+      'escaladoA', 'causaRaiz', 'SolucionCaso'
+    ];
+    for (const field of miscFields) {
+      if (enriched[field]) {
+        enriched[field] = await getMiscName(enriched[field]);
+      }
+    }
+
+    // 2. Servicios Afectados (es un array de IDs)
+    if (Array.isArray(enriched.serviciosAfectados)) {
+      enriched.serviciosAfectados = await Promise.all(
+        enriched.serviciosAfectados.map((id: string) => getMiscName(id))
+      );
+    }
+
+    // 3. Campos que son referencias a Usuarios
+    const userFields = ['operatorResponsable', 'operatorAsignado'];
+    for (const field of userFields) {
+      if (enriched[field]) {
+        enriched[field] = await getUserName(enriched[field]);
+      }
+    }
+
+    return enriched;
   }
 
   async stats() {

@@ -10,7 +10,7 @@ import { User } from './users/entities/user.entity';
 import { AuditLog } from './auth/entities/audit-log.entity';
 import { ServicesModule } from './service/service.module';
 import { Service } from './service/entities/service.entity';
-import { TicketsModule } from './ticket/ticket.module';
+import { TicketModule } from './ticket/ticket.module';
 import { Ticket } from './ticket/entities/ticket.entity';
 import { MiscellaneousModule } from './miscellaneous/miscellaneous.module';
 import { Miscellaneous } from './miscellaneous/entities/miscellaneous.entity';
@@ -41,7 +41,7 @@ import { JwtModule } from '@nestjs/jwt';
     AuditModule,
     UsersModule,
     ServicesModule,
-    TicketsModule,
+    TicketModule,
     MiscellaneousModule,
   ],
   controllers: [AppController],

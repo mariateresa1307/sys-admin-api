@@ -14,9 +14,20 @@ export class AuditService {
     private readonly auditLogRepository: MongoRepository<AuditLog>,
   ) {}
 
+  // ✅ FUNCIÓN AUXILIAR SEGURA: Evita que el servidor crashee si el ID no es válido
+  private safeObjectId(id: any): any {
+    if (!id) return null;
+    try {
+      return new ObjectId(id);
+    } catch {
+      return null; // Si no es un ObjectId válido de 24 caracteres, lo guarda como null
+    }
+  }
+
   async createLog(dto: CreateAuditLogDto): Promise<AuditLog> {
     const auditLogData: any = {
-      userId: dto.userId ? new ObjectId(dto.userId) : null,
+      // ✅ USAR LA FUNCIÓN SEGURA AQUÍ
+      userId: this.safeObjectId(dto.userId),
       userEmail: dto.userEmail || null,
       action: dto.tipoAccion || dto.action,
       moduleId: dto.moduleId,
@@ -25,7 +36,7 @@ export class AuditService {
       ipAddress: dto.ipAddress,
       macAddress: dto.macAddress,
       sourceApplication: dto.sourceApplication,
-      recordId: dto.recordId,
+      recordId: this.safeObjectId(dto.recordId), // ✅ TAMBIÉN PROTEGIDO
       eventDate: dto.fecha ? new Date(dto.fecha) : new Date(),
       details: dto.details,
       userAgent: (dto as any).userAgent,
@@ -38,7 +49,10 @@ export class AuditService {
   private buildQuery(filterDto: AuditFilterDto): any {
     const query: any = {};
 
-    if (filterDto.userId) query.userId = new ObjectId(filterDto.userId);
+    // ✅ PROTEGIDO CONTRA IDs INVÁLIDOS EN FILTROS
+    if (filterDto.userId) {
+      query.userId = this.safeObjectId(filterDto.userId);
+    }
     if (filterDto.action) query.action = filterDto.action;
     if (filterDto.moduleId) query.moduleId = filterDto.moduleId;
 
@@ -146,7 +160,8 @@ export class AuditService {
       historial: facetData.todayLogs.length > 0 ? facetData.todayLogs[0].count : 0,
     };
   }
-  // ✅ MÉTODO DE EXPORTACIÓN CON DISEÑO CORPORATIVO NETUNO (CORREGIDO)
+
+  // ✅ MÉTODO DE EXPORTACIÓN CON DISEÑO CORPORATIVO NETUNO
   async exportLogsToExcel(filterDto: AuditFilterDto): Promise<Buffer> {
     const query = this.buildQuery(filterDto);
     const logs = await this.auditLogRepository.find({ 
@@ -192,7 +207,7 @@ export class AuditService {
     worksheet.mergeCells('A2:F2');
     const headerRow2 = worksheet.getRow(2);
     headerRow2.height = 30;
-    headerRow2.getCell(1).value = 'REPORTE DE AUDITORÍA DE SISTEMA'; // ✅ CORREGIDO
+    headerRow2.getCell(1).value = 'REPORTE DE AUDITORÍA DE SISTEMA';
     headerRow2.getCell(1).font = { 
       bold: true, 
       size: 14, 
@@ -205,14 +220,14 @@ export class AuditService {
     const headerRow3 = worksheet.getRow(3);
     headerRow3.height = 25;
     const generatedDate = new Date().toLocaleString('es-VE', { dateStyle: 'long', timeStyle: 'short' });
-    headerRow3.getCell(1).value = `Generado: ${generatedDate} | Total de Registros: ${logs.length}`; // ✅ CORREGIDO
+    headerRow3.getCell(1).value = `Generado: ${generatedDate} | Total de Registros: ${logs.length}`;
     headerRow3.getCell(1).font = { 
       italic: true, 
       size: 10, 
       color: { argb: 'FF808080' }, // Gris
       name: 'Calibri'
     };
-    headerRow3.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
+    headerRow3.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' }; // Corregido typo 'ali-gnment'
 
     // Espacio antes de la tabla
     worksheet.addRow([]);
@@ -240,13 +255,13 @@ export class AuditService {
       };
     });
 
-    // ✅ 3. COLORES CORPORATIVOS PARA ACCIONES (Tonos suaves para máxima legibilidad)
+    // ✅ 3. COLORES CORPORATIVOS PARA ACCIONES
     const actionColors: Record<string, string> = {
-      LOGIN: 'FFD4EDD9',        // Verde suave (derivado de Verde Lima)
+      LOGIN: 'FFD4EDD9',        // Verde suave
       LOGOUT: 'FFF0F4F8',       // Gris azulado muy claro
-      LOGIN_FAILED: 'FFF8D7DA', // Rojo suave (derivado de Rojo Ladrillo)
-      CREATE: 'FFD1ECF1',       // Azul claro (derivado de Azul Celeste)
-      UPDATE: 'FFFFF3CD',       // Amarillo suave (derivado de Amarillo Miel)
+      LOGIN_FAILED: 'FFF8D7DA', // Rojo suave
+      CREATE: 'FFD1ECF1',       // Azul claro
+      UPDATE: 'FFFFF3CD',       // Amarillo suave
       DELETE: 'FFF5C6CB',       // Rojo suave
       EXPORT: 'FFD1F2EB',       // Turquesa suave
     };
@@ -320,7 +335,7 @@ export class AuditService {
     
     const footerNumber = footerRow.number;
     worksheet.mergeCells(`A${footerNumber}:F${footerNumber}`);
-    footerRow.getCell(1).value = 'NetUno C.A. - RIF: J-30108335-0 | Documento generado automáticamente por el Sistema de Auditoría'; // ✅ CORREGIDO
+    footerRow.getCell(1).value = 'NetUno C.A. - RIF: J-30108335-0 | Documento generado automáticamente por el Sistema de Auditoría';
     footerRow.getCell(1).font = { italic: true, size: 9, color: { argb: 'FF808080' }, name: 'Calibri' };
     footerRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
     footerRow.getCell(1).border = {
