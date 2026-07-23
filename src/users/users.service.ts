@@ -207,7 +207,9 @@ export class UsersService {
     return user.role;
   }
 
-  async deleteUser(id: string): Promise<void> {
+ async deleteUser(id: string): Promise<{ message: string }> {
+    console.log('🗑️ [SERVICE] Eliminando físicamente al usuario con ID:', id);
+    
     let objectId: ObjectId;
     try {
       objectId = new ObjectId(id);
@@ -215,11 +217,26 @@ export class UsersService {
       throw new BadRequestException('ID de usuario inválido');
     }
 
-    const result = await this.userRepository.delete({ _id: objectId } as any);
-    
-    if (result.affected === 0) {
+    // 1. Verificar que el usuario existe
+    const user = await this.userRepository.findOne({ where: { _id: objectId } as any });
+    if (!user) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
+
+    // 2. ✅ Regla de negocio: Validar que esté INACTIVO antes de permitir la eliminación
+    if (user.isActive) {
+      throw new BadRequestException('Solo se pueden eliminar usuarios que estén en estado inactivo.');
+    }
+
+    // 3. Ejecutar la eliminación física
+    const result = await this.userRepository.delete({ _id: objectId } as any);
+    console.log('🗑️ [SERVICE] Resultado del delete:', result);
+
+    if (result.affected === 0) {
+      throw new NotFoundException(`No se pudo eliminar el usuario con ID ${id}`);
+    }
+
+    return { message: 'Usuario eliminado permanentemente de la base de datos' };
   }
 
 }

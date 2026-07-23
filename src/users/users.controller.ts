@@ -1,4 +1,4 @@
-import {  Controller,  Get,  Post,  Body,  Patch,  Param,  Delete, UseGuards, Put, Query, Req} from '@nestjs/common';
+import {  Controller,  Get,  Post,  Body,  Patch,  Param,  Delete, UseGuards, Put, Query, Req, HttpCode, HttpStatus} from '@nestjs/common';
 import type { Request } from 'express';
 import { UsersService } from './users.service';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -79,8 +79,8 @@ async create(@Body() createUserDto: CreateUserDto) {
   }
 
   @Delete(':id')
-  //@HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Param('id') id: string) {
-    return await this.usersService.remove(id);
+    console.log('️ [BACKEND] Eliminando usuario con ID:', id);
+    return await this.usersService.deleteUser(id);
   }
 }
