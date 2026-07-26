@@ -50,6 +50,66 @@ export class ServiceService implements OnModuleInit {
     }
   }
 
+
+async findAllPaginated(
+  page = 1,
+  limit = 10,
+  search?: string,
+  tipoServicio?: string,
+  excludeTipo?: string,
+  status?: string, 
+  vlan ?:number | null,
+) {
+  const take = limit > 0 ? limit : 10;
+  const skip = page > 1 ? (page - 1) * take : 0;
+  const where: any = {};
+
+  if (search?.trim()) {
+    where.$or = [
+      { name: { $regex: search.trim(), $options: 'i' } },
+      { id_circuito: { $regex: search.trim(), $options: 'i' } },
+      { id_netuno: { $regex: search.trim(), $options: 'i' } },
+    ];
+  }
+
+  if (tipoServicio && tipoServicio !== 'Todos') {
+    where.tipoServicio = tipoServicio;
+  }
+
+  if (excludeTipo) {
+    where.tipoServicio = { $ne: excludeTipo };
+  }
+
+    if (status && status.trim() !== '') {
+    console.log(`🔍 Filtrando por status: "${status}"`);
+    // Usar regex case-insensitive para manejar "Activo", "activo", "ACTIVO", etc.
+    where.status = { $regex: new RegExp(`^${status}$`, 'i') };
+  }
+   
+
+  console.log('Filtro MongoDB:', JSON.stringify(where));
+
+  const [data, total] = await Promise.all([
+    this.serviceRepository.find({ 
+      where, 
+      skip, 
+      take, 
+      order: { status: 'ASC', createdAt: 'DESC' } 
+    } as any),
+    this.serviceRepository.count(where as any),
+  ]);
+
+  console.log(`Resultados: ${data.length} de ${total} total`);
+  return {
+    data,
+    total,
+    page,
+    limit: take,
+    totalPages: Math.ceil(total / take),
+  };
+}
+
+
   async remove(id: string): Promise<void> {
     const service = await this.findServiceById(new ObjectId(id));
     service.status = 'Inactivo';
@@ -133,7 +193,8 @@ export class ServiceService implements OnModuleInit {
 
   async removeService(id: string): Promise<void> {
     const service = await this.findServiceById(new ObjectId(id));
-    service.status = 'Inactivo';
+     service.status = service.status === 'Activo' ? 'Inactivo' : 'Activo';
+    
     await this.serviceRepository.save(service);
   }
 

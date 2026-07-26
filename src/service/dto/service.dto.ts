@@ -84,7 +84,7 @@ export class ServiceDto {
 
   @IsNumber()
   @IsOptional()
-  vlan?: number;
+  vlan?: number ;
 
   @IsString()
   @IsOptional()
