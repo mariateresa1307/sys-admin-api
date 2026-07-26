@@ -14,6 +14,7 @@ import { TicketModule } from './ticket/ticket.module';
 import { Ticket } from './ticket/entities/ticket.entity';
 import { MiscellaneousModule } from './miscellaneous/miscellaneous.module';
 import { Miscellaneous } from './miscellaneous/entities/miscellaneous.entity';
+import { ReportsModule } from './reports/reports.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
 import { JwtModule } from '@nestjs/jwt'; 
@@ -43,6 +44,7 @@ import { JwtModule } from '@nestjs/jwt';
     ServicesModule,
     TicketModule,
     MiscellaneousModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [
