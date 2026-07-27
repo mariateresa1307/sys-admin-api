@@ -28,11 +28,14 @@ export class Service {
   @Column({ nullable: true })
   ipNetuno?: string;
 
-  @Column({ nullable: true })
-  id_netuno!: string;
+  @Column({nullable:true})
+  producto?: string;
 
   @Column({ nullable: true })
-  id_circuito!: string;
+  id_netuno?: string;
+
+  @Column({ nullable: true })
+  id_circuito?: string;
 
   @Column({ nullable: true })
   idRBS?: string;
@@ -41,7 +44,7 @@ export class Service {
   serialONT?: string;
 
   @Column({ nullable: true })
-  vlan?: number | null;
+  vlan?: string | null; // ✅ Cambiado a string para soportar rangos
 
   @Column({ nullable: true })
   contrato?: number | null;
@@ -59,7 +62,20 @@ export class Service {
   diagramaRed?: string;
 
   @Column({ nullable: true })
-  proveedorDelServicioCompartido!: string;
+  proveedorDelServicioCompartido?: string;
+
+  // ✅ NUEVOS CAMPOS AGREGADOS:
+  @Column({ nullable: true })
+  proveedorUM?: string;
+
+  @Column({ nullable: true })
+  ultimaMilla?: string;
+
+  @Column({ nullable: true })
+  proveedor?: string;
+
+  @Column({ nullable: true })
+  idDOG?: string;
 
   @Column({ default: 'Activo' })
   status?: string;

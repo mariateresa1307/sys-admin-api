@@ -51,6 +51,11 @@ export class ServiceDto {
 
   @IsString()
   @IsOptional()
+  producto?:string;
+
+
+  @IsString()
+  @IsOptional()
   id_netuno?: string;
 
   @IsString()

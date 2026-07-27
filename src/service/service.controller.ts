@@ -32,6 +32,8 @@ export class ServiceController {
     );
 
 
+
+
       console.log('📤 [ServiceController] Resultado:', {
     total: result.total,
     dataLength: result.data.length,
@@ -48,6 +50,7 @@ export class ServiceController {
         city: s.city,
         tipoCliente: s.tipoCliente,
         ipNetuno: s.ipNetuno,
+        producto: s.producto,
         id_netuno: s.id_netuno,
         idRBS: s.idRBS,
         serialONT: s.serialONT,
@@ -55,6 +58,8 @@ export class ServiceController {
         vlan: s.vlan ?? null,
         contrato: s.contrato ?? null,
         proveedorDelServicioCompartido: s.proveedorDelServicioCompartido,
+         proveedorUM: s.proveedorUM,
+      ultimaMilla: s.ultimaMilla,
         nodoA: s.nodoA,
         nodoB: s.nodoB,
         nodoOLT: s.nodoOLT,
