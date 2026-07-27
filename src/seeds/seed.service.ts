@@ -4,10 +4,9 @@ import { MiscellaneousService } from '../miscellaneous/miscellaneous.service';
 import { CIUDADES_DATA } from './dbSeed/localidades';
 import { CATEGORIA_RED } from './dbSeed/categoria';
 import { TIPO_CLIENTES } from './dbSeed/tipoCliente';
-import {GRUPO_DESTINO} from './dbSeed/grupoDestino';
+import { GRUPO_DESTINO } from './dbSeed/grupoDestino';
 import { ULTIMA_MILLA } from './dbSeed/ultimaMilla';
 import { PROVEEDOR_SERVICIO_COMPARTIDO } from './dbSeed/servicioCompartido';
-
 
 @Injectable()
 export class SeedService {
@@ -70,7 +69,6 @@ export class SeedService {
       }
     }
   }
- 
 
   private async seedEstadosCiudadesLocalidades() {
     console.log('🏙️  Seeding Estados, Ciudades y Localidades...');
@@ -98,6 +96,7 @@ export class SeedService {
         console.log(`      ✓ Estado: ${estadoNombre}`);
       } catch (error) {
         console.log(`      ⚠️  Estado ${estadoNombre} ya existe`);
+        // ✅ CORRECCIÓN: Usar findAll y buscar directamente en el array
         const estados = await this.miscellaneousService.findAll({ categoria: 'ESTADO' });
         const existente = estados.find((e: any) => e.valor === estadoNombre);
         if (existente) {
@@ -127,6 +126,7 @@ export class SeedService {
         console.log(`      ✓ Ciudad: ${ciudadNombre} ${ciudadData.estado ? `(${ciudadData.estado})` : ''}`);
       } catch (error) {
         console.log(`      ⚠️  Ciudad ${ciudadNombre} ya existe`);
+        // ✅ CORRECCIÓN: Usar findAll y buscar directamente en el array
         const ciudades = await this.miscellaneousService.findAll({ categoria: 'CIUDAD' });
         const existente = ciudades.find((c: any) => c.valor === ciudadNombre);
         if (existente) {
@@ -176,22 +176,18 @@ export class SeedService {
     );
   }
 
-  // ✅ CORREGIDO: Seed unificado con padreId y padreNombre explícitos
   private async seedCategoriasSubcategoriasDetalles() {
     console.log('🌐 Seeding Categorías, Subcategorías y Detalles...');
 
-    // ✅ Separar el array por tipo
     const categorias = CATEGORIA_RED.filter((item) => item.categoria === 'CATEGORIA_RED');
     const subcategorias = CATEGORIA_RED.filter((item) => item.categoria === 'SUBCATEGORIA');
     const detalles = CATEGORIA_RED.filter((item) => item.categoria === 'DETALLE');
 
     console.log(`   📊 Total: ${categorias.length} categorías, ${subcategorias.length} subcategorías, ${detalles.length} detalles`);
 
-    // ✅ Mapa de valor → _id para cada nivel
     const categoriasMap = new Map<string, string>();
     const subcategoriasMap = new Map<string, string>();
 
-    // ✅ PASO 1: Crear CATEGORIA_RED
     console.log('   📍 Paso 1: Creando Categorías de Red...');
     for (const cat of categorias) {
       try {
@@ -206,8 +202,8 @@ export class SeedService {
         console.log(`      ✓ Categoría: ${cat.valor}`);
       } catch (error) {
         console.log(`      ⚠️  Categoría ${cat.valor} ya existe`);
-        // Buscar la existente
-        const todas = await this.miscellaneousService.findAll({});
+        // ✅ CORRECCIÓN: Usar findAll con filtro de categoría
+        const todas = await this.miscellaneousService.findAll({ categoria: 'CATEGORIA_RED' });
         const existente = todas.find(
           (c: any) => c.categoria === 'CATEGORIA_RED' && c.valor === cat.valor,
         );
@@ -218,9 +214,7 @@ export class SeedService {
     }
 
     console.log(`   ✅ Categorías mapeadas: ${categoriasMap.size}`);
-    console.log(`   📋 Keys: ${Array.from(categoriasMap.keys()).join(', ')}`);
 
-    // ✅ PASO 2: Crear SUBCATEGORIA con categoriaId, padreId y padreNombre
     console.log('   📍 Paso 2: Creando Subcategorías...');
     for (const subcat of subcategorias) {
       if (!subcat.categoriaId) {
@@ -241,16 +235,16 @@ export class SeedService {
           valor: subcat.valor,
           descripcion: subcat.descripcion || '',
           activo: true,
-          categoriaId: categoriaPadreId, // ✅ Campo específico
-          padreId: categoriaPadreId,      // ✅ Campo genérico
-          padreNombre: subcat.categoriaId, // ✅ Nombre del padre
+          categoriaId: categoriaPadreId,
+          padreId: categoriaPadreId,
+          padreNombre: subcat.categoriaId,
         });
         subcategoriasMap.set(subcat.valor, nuevaSubcat._id.toString());
         console.log(`      ✓ Subcategoría: ${subcat.valor} → ${subcat.categoriaId} (${categoriaPadreId})`);
       } catch (error) {
         console.log(`      ⚠️  Subcategoría ${subcat.valor} ya existe`);
-        // Buscar la existente
-        const todas = await this.miscellaneousService.findAll({});
+        // ✅ CORRECCIÓN: Usar findAll con filtro de categoría
+        const todas = await this.miscellaneousService.findAll({ categoria: 'SUBCATEGORIA' });
         const existente = todas.find(
           (s: any) => s.categoria === 'SUBCATEGORIA' && s.valor === subcat.valor,
         );
@@ -261,13 +255,10 @@ export class SeedService {
     }
 
     console.log(`   ✅ Subcategorías mapeadas: ${subcategoriasMap.size}`);
-    console.log(`   📋 Keys: ${Array.from(subcategoriasMap.keys()).join(', ')}`);
 
-    // ✅ PASO 3: Crear DETALLE con subcategoriaId, padreId y padreNombre
     console.log('   📍 Paso 3: Creando Detalles...');
     let totalDetalles = 0;
 
-    // Procesar detalles en paralelo por subcategoría padre
     const detallesPorSubcat = new Map<string, typeof detalles>();
     for (const det of detalles) {
       if (!det.categoriaId) {
@@ -295,9 +286,9 @@ export class SeedService {
             valor: det.valor,
             descripcion: det.descripcion || '',
             activo: true,
-            subcategoriaId: subcatPadreId, // ✅ Campo específico
-            padreId: subcatPadreId,         // ✅ Campo genérico
-            padreNombre: subcatNombre,      // ✅ Nombre del padre
+            subcategoriaId: subcatPadreId,
+            padreId: subcatPadreId,
+            padreNombre: subcatNombre,
           });
           return true;
         } catch (error) {
@@ -317,8 +308,7 @@ export class SeedService {
     );
   }
 
-
-     private async seedGrupoDestino() {
+  private async seedGrupoDestino() {
     console.log('🏢 Seeding grupos de destino...');
     for (const grupo of GRUPO_DESTINO) {
       try {
@@ -335,7 +325,7 @@ export class SeedService {
     }
   }
 
-     private async seedUltimaMilla() {
+  private async seedUltimaMilla() {
     console.log('🏢 Seeding últimas millas...');
     for (const ultimaMilla of ULTIMA_MILLA) {
       try {
@@ -352,7 +342,7 @@ export class SeedService {
     }
   }
 
-    private async seedProveedorServicioCompartido() {
+  private async seedProveedorServicioCompartido() {
     console.log('🏢 Seeding proveedores de servicios compartidos...');
     for (const proveedor of PROVEEDOR_SERVICIO_COMPARTIDO) {
       try {
@@ -368,6 +358,4 @@ export class SeedService {
       }
     }
   }
-  
-   
 }

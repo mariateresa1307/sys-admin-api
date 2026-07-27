@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString, IsBoolean } from 'class-validator';
+
 export class ServiceResponseDto {
   _id?: string;
   tipoServicio?: string;
@@ -15,7 +16,7 @@ export class ServiceResponseDto {
   nodoOLT?: string;
 
   contrato?: number | null;
-  vlan?: number | null;
+  vlan?: string | null; // ✅ Cambiado a string para soportar "600-609"
   status?: string;
   instalado?: boolean | string;
   diagramaRed?: string;
@@ -34,17 +35,15 @@ export class ServiceDto {
   @IsNotEmpty()
   city?: string;
 
-  @IsString()
-  @IsNotEmpty()
-  ultimaMilla?: string;
+
 
   @IsString()
   @IsOptional()
   tipoCliente?: string;
 
   @IsString()
-  @IsNotEmpty()
-  proveedorDelServicioCompartido!: string;
+  @IsOptional() // ✅ Cambiado a Optional para permitir null cuando es METROLAN
+  proveedorDelServicioCompartido?: string;
 
   @IsString()
   @IsOptional()
@@ -82,9 +81,9 @@ export class ServiceDto {
   @IsOptional()
   contrato?: number;
 
-  @IsNumber()
+  @IsString() // ✅ Cambiado de @IsNumber() a @IsString()
   @IsOptional()
-  vlan?: number ;
+  vlan?: string;
 
   @IsString()
   @IsOptional()
@@ -105,6 +104,10 @@ export class ServiceDto {
   @IsString()
   @IsOptional()
   proveedorUM?: string;
+
+  @IsString()
+  @IsOptional() 
+  ultimaMilla?: string;
 
   @IsString()
   @IsOptional()

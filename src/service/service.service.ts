@@ -6,7 +6,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MongoRepository } from 'typeorm';
+import { MongoRepository, DeepPartial } from 'typeorm';
 import { Service } from './entities/service.entity';
 import { ObjectId } from 'mongodb';
 import { ServiceDto } from './dto/service.dto';
@@ -179,7 +179,9 @@ async findAllPaginated(
 
   async createService(serviceData: Partial<ServiceDto>): Promise<Service> {
     try {
-      const newService = this.serviceRepository.create(serviceData);
+      const newService = this.serviceRepository.create(
+        serviceData as DeepPartial<Service>,
+      );
       return await this.serviceRepository.save(newService);
     } catch (error: any) {
       if (error.code === 11000) {
