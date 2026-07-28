@@ -58,6 +58,7 @@ async findAllPaginated(
   tipoServicio?: string,
   excludeTipo?: string,
   status?: string, 
+  tipoCliente?: string,
   vlan ?:number | null,
 ) {
   const take = limit > 0 ? limit : 10;
@@ -82,8 +83,11 @@ async findAllPaginated(
 
     if (status && status.trim() !== '') {
     console.log(`🔍 Filtrando por status: "${status}"`);
-    // Usar regex case-insensitive para manejar "Activo", "activo", "ACTIVO", etc.
     where.status = { $regex: new RegExp(`^${status}$`, 'i') };
+  }
+
+   if (tipoCliente && tipoCliente.trim() !== '') {
+    where.tipoCliente = tipoCliente;
   }
    
 

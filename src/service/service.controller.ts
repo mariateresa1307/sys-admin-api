@@ -16,7 +16,8 @@ export class ServiceController {
     @Query('search') search?: string,
     @Query('tipoServicio') tipoServicio?: string,
     @Query('excludeTipo') excludeTipo?: string,
-      @Query('status') status?: string,
+    @Query('status') status?: string,
+    @Query('tipoCliente') tipoCliente?: string, 
   ) {
 
      console.log(' [ServiceController] Parámetros recibidos:', { 
@@ -29,6 +30,9 @@ export class ServiceController {
       tipoServicio,
       excludeTipo,
       status,
+    
+      tipoCliente,
+      
     );
 
 
@@ -65,6 +69,8 @@ export class ServiceController {
         nodoOLT: s.nodoOLT,
         diagramaRed: s.diagramaRed,
         status: s.status || 'Activo',
+        createdAt: s.createdAt || null,
+        updatedAt: s.updatedAt || null,
       })),
     };
   }
