@@ -7,6 +7,7 @@ import { User } from '../users/entities/user.entity';
 import { AuditLog } from '../auth/entities/audit-log.entity';
 import { Miscellaneous } from '../miscellaneous/entities/miscellaneous.entity';
 import { UsersModule } from '../users/users.module';
+import { Service } from '../service/entities/service.entity'; 
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { UsersModule } from '../users/users.module';
       User,
       AuditLog,
       Miscellaneous,
+       Service,
     ]),
     UsersModule, 
   ],

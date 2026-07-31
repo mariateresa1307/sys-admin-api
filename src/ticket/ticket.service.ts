@@ -16,6 +16,7 @@ import { User } from 'src/users/entities/user.entity';
 import { Request } from 'express';
 import { AuditLog } from '../auth/entities/audit-log.entity';
 import { Miscellaneous } from '../miscellaneous/entities/miscellaneous.entity';
+import { Service } from '../service/entities/service.entity';
 
 @Injectable()
 export class TicketService {
@@ -27,12 +28,36 @@ export class TicketService {
     private readonly auditLogRepository: MongoRepository<AuditLog>,
     @InjectRepository(Miscellaneous)
     private readonly miscellaneousRepository: MongoRepository<Miscellaneous>,
+    @InjectRepository(Service) 
+    private readonly serviceRepository: MongoRepository<Service>,
   ) {}
 
   async createTicket(createTicketDto: TicketDto): Promise<Ticket> {
-    const newTicket = this.ticketRepository.create(createTicketDto);
-    const savedTicket = await this.ticketRepository.save(newTicket);
-    return Array.isArray(savedTicket) ? savedTicket[0]! : savedTicket;
+    let attempts = 0;
+    const maxAttempts = 3;
+    let currentCaseNumber = createTicketDto.caseNumber;
+
+    while (attempts < maxAttempts) {
+      const existingTicket = await this.ticketRepository.findOne({ 
+        caseNumber: currentCaseNumber 
+      } as any);
+
+      if (!existingTicket) {
+        const newTicket = this.ticketRepository.create({
+          ...createTicketDto,
+          caseNumber: currentCaseNumber,
+        });
+        const savedTicket = await this.ticketRepository.save(newTicket);
+        return Array.isArray(savedTicket) ? savedTicket[0]! : savedTicket;
+      }
+
+      attempts++;
+      const prefix = currentCaseNumber.split('-')[0] || 'TCK';
+      const randomNum = Math.floor(100000 + Math.random() * 900000);
+      currentCaseNumber = `${prefix}-${randomNum}`;
+    }
+
+    throw new BadRequestException('No se pudo generar un número de ticket único. Intente nuevamente.');
   }
 
   async findAllPaginated(
@@ -62,7 +87,46 @@ export class TicketService {
     }
 
     const [data, total] = await Promise.all([
-      this.ticketRepository.find(findOptions as any),
+      this.ticketRepository.find(findOptions as any)
+        .then(tickets => Promise.all(
+          tickets.map(async (ticket) => {
+             if (ticket.tipoCliente && typeof ticket.tipoCliente === 'string') {
+              try {
+                const tipoClienteDoc = await this.miscellaneousRepository.findOne({ 
+                  _id: new ObjectId(ticket.tipoCliente) 
+                } as any);
+                if (tipoClienteDoc) {
+                  (ticket as any).tipoCliente = tipoClienteDoc;
+                }
+              } catch (error) {
+                console.warn('⚠️ Error populando tipoCliente:', error);
+              }
+            }
+
+            if (Array.isArray(ticket.serviciosAfectados) && ticket.serviciosAfectados.length > 0) {
+              try {
+                const idsValidos = ticket.serviciosAfectados
+                  .filter((id: any) => typeof id === 'string' && id.length === 24);
+                
+                if (idsValidos.length > 0) {
+                  const serviciosEncontrados = await this.serviceRepository.find({
+                    where: {
+                      _id: { $in: idsValidos.map((id: string) => new ObjectId(id)) }
+                    } as any
+                  });
+                  
+                  if (serviciosEncontrados.length > 0) {
+                    ticket.serviciosAfectados = serviciosEncontrados as any;
+                  }
+                }
+              } catch (error) {
+                console.warn('⚠️ Error populando serviciosAfectados:', error);
+              }
+            }
+            
+            return ticket;
+          })
+        )),
       where ? this.ticketRepository.count(where) : this.ticketRepository.count(),
     ]);
 
@@ -183,10 +247,36 @@ export class TicketService {
     if (!ticket) {
       throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
     }
-    return ticket;
+
+    if (Array.isArray(ticket.serviciosAfectados) && ticket.serviciosAfectados.length > 0) {
+      try {
+        const idsValidos = ticket.serviciosAfectados
+          .filter((id: any) => typeof id === 'string' && id.length === 24);
+        
+        if (idsValidos.length > 0) {
+          const serviciosEncontrados = await this.serviceRepository.find({
+            where: {
+              _id: { $in: idsValidos.map((id: string) => new ObjectId(id)) }
+            } as any
+          });
+          
+          if (serviciosEncontrados.length > 0) {
+            ticket.serviciosAfectados = serviciosEncontrados as any;
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Error populando serviciosAfectados:', error);
+      }
+    }
+ 
+    return {
+      ...ticket,
+      createdAt: ticket.createdAt || ticket._id.getTimestamp(),
+      updatedAt: ticket.updatedAt || ticket.createdAt,
+    };
   }
 
-  // ✅ MODIFICADO: Ahora enriquece oldValue y newValue con nombres legibles
+  // ✅ CORREGIDO: Lógica limpia y única, con updatedAt forzado
   async updateTicket(
     id: string,
     updateTicketDto: UpdateTicketDto,
@@ -206,9 +296,11 @@ export class TicketService {
     const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
     
     if (oldTicket && req) {
-      // ✅ Enriquecer oldValue con nombres legibles para la auditoría
       (req as any).oldValue = await this.enrichTicketForAudit(oldTicket);
     }
+
+    // ✅ Fuerza la actualización de la fecha de modificación
+    updateData.updatedAt = new Date();
 
     const result = await this.ticketRepository.updateOne(
       { _id: objectId },
@@ -222,13 +314,13 @@ export class TicketService {
     const updatedTicket = await this.findTicketById(id);
 
     if (req) {
-      // ✅ Enriquecer newValue con nombres legibles para la auditoría
       (req as any).newValue = await this.enrichTicketForAudit(updatedTicket);
     }
 
     return updatedTicket;
   }
 
+  // ✅ CORREGIDO: También actualiza updatedAt al cerrar
   async closeTicket(id: string, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
     try {
@@ -242,9 +334,44 @@ export class TicketService {
       throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
     }
 
+    const horaCierre = new Date();
+    
+    const formatDate = (dateVal: any) => {
+      if (!dateVal) return 'N/A';
+      try {
+        return new Date(dateVal).toLocaleString('es-VE', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        });
+      } catch {
+        return 'N/A';
+      }
+    };
+
+    const currentDescription = ticket.description || ticket.bitacora || '';
+    
+    const lineaCierre = `Fecha y hora de cierre ticket: ${formatDate(horaCierre)}`;
+    
+    let finalDescription = currentDescription;
+    if (!currentDescription.includes('Fecha y hora de cierre ticket:')) {
+      finalDescription = currentDescription 
+        ? `${currentDescription}\n${lineaCierre}` 
+        : lineaCierre;
+    } else {
+      finalDescription = currentDescription.replace(
+        /Fecha y hora de cierre ticket:.*/,
+        lineaCierre
+      );
+    }
+
     const updateData = {
       status: TICKET_STATUS.CERRADO,
-      horaCierreFalla: new Date(),
+      horaCierreFalla: horaCierre,
+      horaCierre: horaCierre,
+      description: finalDescription,
+      descripcion: finalDescription,
+      bitacora: finalDescription,
+      updatedAt: new Date(), // ✅ Fuerza la actualización de la fecha de modificación
     };
 
     await this.ticketRepository.updateOne(
@@ -260,15 +387,16 @@ export class TicketService {
         'UPDATE',
         userData,
         { status: ticket.status },
-        { status: TICKET_STATUS.CERRADO, horaCierreFalla: updateData.horaCierreFalla },
+        { status: TICKET_STATUS.CERRADO, horaCierreFalla: horaCierre },
         req,
-        `Ticket ${ticket.caseNumber} cerrado por ${userData?.userEmail || 'usuario'}`,
+        `Ticket ${ticket.caseNumber} cerrado`,
       );
     }
 
     return this.findTicketById(id);
   }
 
+  // ✅ CORREGIDO: También actualiza updatedAt al reabrir
   async reopenTicket(id: string, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
     try {
@@ -290,6 +418,7 @@ export class TicketService {
 
     const updateData = {
       status: TICKET_STATUS.ACTIVO,
+      updatedAt: new Date(), // ✅ Fuerza la actualización de la fecha de modificación
     };
 
     await this.ticketRepository.updateOne(
@@ -343,12 +472,10 @@ export class TicketService {
     }
   }
 
-  // ✅ NUEVO MÉTODO: Convierte IDs en nombres legibles para el log de auditoría
   private async enrichTicketForAudit(ticket: any) {
     if (!ticket) return null;
     const enriched = { ...ticket };
 
-    // Helper para obtener nombre de Miscellaneous
     const getMiscName = async (id: string) => {
       if (!id || typeof id !== 'string') return id;
       try {
@@ -359,7 +486,6 @@ export class TicketService {
       }
     };
 
-    // Helper para obtener nombre de Usuario
     const getUserName = async (id: string) => {
       if (!id || typeof id !== 'string') return id;
       try {
@@ -370,7 +496,6 @@ export class TicketService {
       }
     };
 
-    // 1. Campos que son referencias a Miscellaneous
     const miscFields = [
       'networkCategory', 'subcategoria', 'detalle', 'tipoCliente', 
       'escaladoA', 'causaRaiz', 'SolucionCaso'
@@ -381,14 +506,12 @@ export class TicketService {
       }
     }
 
-    // 2. Servicios Afectados (es un array de IDs)
     if (Array.isArray(enriched.serviciosAfectados)) {
       enriched.serviciosAfectados = await Promise.all(
         enriched.serviciosAfectados.map((id: string) => getMiscName(id))
       );
     }
 
-    // 3. Campos que son referencias a Usuarios
     const userFields = ['operatorResponsable', 'operatorAsignado'];
     for (const field of userFields) {
       if (enriched[field]) {
