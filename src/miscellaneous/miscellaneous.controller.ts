@@ -18,13 +18,37 @@ export class MiscellaneousController {
     return this.miscellaneousService.create(createDto);
   }
 
-  @Get()
-  findAll(@Query() filtro: CategoryFilterDto) {
-    return this.miscellaneousService.findAll(filtro);
+    @Get()
+  async findAll(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '10',
+    @Query('valor') valor?: string,
+    @Query('categoria') categoria?: string,
+    @Query('padreId') padreId?: string,
+    @Query('activo') activo?: string,
+  ) {
+    console.log('📥 [CONTROLLER] Parámetros recibidos:', { page, limit, valor, categoria, padreId, activo });
+    
+    const result = await this.miscellaneousService.findAllPaginated(
+      Number(page),
+      Number(limit),
+      { valor, categoria, padreId, activo }
+    );
+
+    console.log('📤 [CONTROLLER] Resultado:', {
+      total: result.total,
+      dataLength: result.data.length,
+      page: result.page,
+      totalPages: result.totalPages
+    });
+
+    return result;
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(
+    @Param('id') id: string)
+     {
     return this.miscellaneousService.findOne(id);
   }
 

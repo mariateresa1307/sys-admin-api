@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException, BadRequestException , UseGuards, Req} from '@nestjs/common';
-import type { Request } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MongoRepository } from 'typeorm';
 import { ObjectId } from 'mongodb';
@@ -8,7 +7,6 @@ import { CreateMiscellaneousDto } from './dto/create-miscellaneous.dto';
 import { UpdateMiscellaneousDto } from './dto/update-miscellaneous.dto';
 import { CategoryFilterDto } from './dto/categoryFilter.dto';
 import { AuditService } from '../audit/audit.service'; 
-import { AuditAction } from '../auth/entities/audit-log.entity';
 
 @Injectable()
 export class MiscellaneousService {
@@ -144,6 +142,51 @@ export class MiscellaneousService {
     });
 
     return await this.miscellaneousRepository.save(newItem);
+  }
+
+  async findAllPaginated(
+    page: number = 1,
+    limit: number = 10,
+    filter: { valor?: string; categoria?: string; padreId?: string; activo?: string }
+  ) {
+    const take = limit > 0 ? limit : 10;
+    const skip = page > 1 ? (page - 1) * take : 0;
+    const where: any = {};
+
+    if (filter.categoria) {
+      where.categoria = filter.categoria;
+    }
+    if (filter.padreId) {
+      where.padreId = new ObjectId(filter.padreId);
+    }
+    if (filter.valor?.trim()) {
+      where.valor = { $regex: filter.valor.trim(), $options: 'i' };
+    }
+    if (filter.activo !== undefined) {
+      where.activo = filter.activo === 'true';
+    }
+
+    console.log('🔍 [SERVICE] Filtro MongoDB:', JSON.stringify(where));
+
+    const [data, total] = await Promise.all([
+      this.miscellaneousRepository.find({ 
+        where, 
+        skip, 
+        take, 
+        order: { valor: 'ASC' } 
+      } as any),
+      this.miscellaneousRepository.count(where as any),
+    ]);
+
+    console.log(`📊 [SERVICE] Resultados: ${data.length} de ${total} total`);
+
+    return {
+      data,
+      total,
+      page,
+      limit: take,
+      totalPages: Math.ceil(total / take),
+    };
   }
 
   async findAll(filter: CategoryFilterDto) {
