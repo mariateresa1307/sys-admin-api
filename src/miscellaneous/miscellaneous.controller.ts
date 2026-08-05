@@ -6,7 +6,6 @@ import { UpdateMiscellaneousDto } from './dto/update-miscellaneous.dto';
 import { CategoryFilterDto } from './dto/categoryFilter.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-
 @Controller('miscellaneous')
 @UseGuards(JwtAuthGuard)
 export class MiscellaneousController {
@@ -18,7 +17,7 @@ export class MiscellaneousController {
     return this.miscellaneousService.create(createDto);
   }
 
-    @Get()
+  @Get()
   async findAll(
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
@@ -42,37 +41,39 @@ export class MiscellaneousController {
       totalPages: result.totalPages
     });
 
-    return result;
+    // ✅ Mapeo de _id a string para consistencia con el frontend (igual que en ServiceController)
+    return {
+      ...result,
+      data: result.data.map((item: any) => ({
+        ...item,
+        _id: item._id.toString(),
+      })),
+    };
   }
 
   @Get(':id')
-  findOne(
-    @Param('id') id: string)
-     {
+  findOne(@Param('id') id: string) {
     return this.miscellaneousService.findOne(id);
   }
 
   @Get(':id/with-parents')
   async findOneWithParents(@Param('id') id: string) {
-
     const item = await this.miscellaneousService.findOne(id);
     if (!item.padreId) {
-      return {... item, padre: null}; // Retorna un objeto con un arreglo vacío si no se encuentra el item
+      return { ...item, padre: null };
     }
     const padre = await this.miscellaneousService.findOne(item.padreId.toString());
-    return {... item, padre};
+    return { ...item, padre };
   }
 
   @Put(':id')
-    async update(
-      @Param('id') id: string, 
-      @Body() updateMiscellaneousDto: UpdateMiscellaneousDto,
-      @Req() req: Request
-    ) {
-    
-      return await this.miscellaneousService.update(id, updateMiscellaneousDto,req); 
-    }
-  
+  async update(
+    @Param('id') id: string, 
+    @Body() updateMiscellaneousDto: UpdateMiscellaneousDto,
+    @Req() req: Request
+  ) {
+    return await this.miscellaneousService.update(id, updateMiscellaneousDto, req); 
+  }
 
   @Delete(':id')
   remove(@Param('id') id: string) {

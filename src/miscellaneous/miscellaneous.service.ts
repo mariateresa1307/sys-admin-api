@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException , UseGuards, Req} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MongoRepository } from 'typeorm';
 import { ObjectId } from 'mongodb';
@@ -13,137 +14,10 @@ export class MiscellaneousService {
   constructor(
     @InjectRepository(Miscellaneous)
     private readonly miscellaneousRepository: MongoRepository<Miscellaneous>,
-      private readonly auditService: AuditService, 
+    private readonly auditService: AuditService, 
   ) {}
 
-  async create(createDto: CreateMiscellaneousDto) {
-    let padreId: string | undefined;
-    let padreNombre: string | undefined;
-
-    switch (createDto.categoria) {
-      case 'SUBCATEGORIA':
-        padreId = createDto.categoriaId;
-        break;
-
-      case 'DETALLE':
-        padreId = createDto.subcategoriaId;
-        break;
-
-      case 'CIUDAD':
-        padreId = createDto.estadoId;
-        break;
-
-      case 'LOCALIDAD':
-        padreId = createDto.ciudadId;
-        break;
-
-      case 'SOLUCION_CASO':
-        padreId = createDto.causaId;
-        break;
-
-      
-      case 'TIPO_CLIENTE':
-        
-        if (!createDto.nivelSeveridad) {
-          throw new BadRequestException('Debe proporcionar nivelSeveridad para TIPO_CLIENTE');
-        }
-        padreId = undefined; 
-        break;
-
-      case 'CATEGORIA_RED':
-      case 'ESTADO':
-      case 'CAUSA_RAIZ':
-      case 'GRUPO_DESTINO':
-      case 'PLATAFORMA':
-      case 'SERVICIO':
-      case 'ULTIMA_MILLA':
-      case 'PROVEEDOR':
-
-        padreId = undefined;
-        break;
-
-      default:
-        throw new BadRequestException(`Categoría '${createDto.categoria}' no válida`);
-    }
-
-
-    const whereQuery: any = {
-      categoria: createDto.categoria,
-      valor: createDto.valor.toUpperCase(),
-    };
-
-    if (createDto.categoria === 'TIPO_CLIENTE' && createDto.nivelSeveridad) {
-      whereQuery.nivelSeveridad = createDto.nivelSeveridad;
-    }
-
-    if (padreId) {
-      whereQuery.padreId = new ObjectId(padreId);
-    }
-
-    const exists = await this.miscellaneousRepository.findOne({ where: whereQuery });
-
-    if (exists) {
-      if (createDto.categoria === 'SOLUCION_CASO') {
-        throw new BadRequestException(
-          `La solución '${createDto.valor}' ya está asociada a esta causa raíz`,
-        );
-      } else if (createDto.categoria === 'LOCALIDAD') {
-        throw new BadRequestException(
-          `La localidad '${createDto.valor}' ya está asociada a esta ciudad`,
-        );
-      } else if (createDto.categoria === 'CIUDAD') {
-        throw new BadRequestException(
-          `La ciudad '${createDto.valor}' ya está asociada a este estado`,
-        );
-      } else if (createDto.categoria === 'SUBCATEGORIA') {
-        throw new BadRequestException(
-          `La subcategoría '${createDto.valor}' ya está asociada a esta categoría`,
-        );
-      } else if (createDto.categoria === 'DETALLE') {
-        throw new BadRequestException(
-          `El detalle '${createDto.valor}' ya está asociado a esta subcategoría`,
-        );
-      } else if (createDto.categoria === 'TIPO_CLIENTE') {
-        throw new BadRequestException(
-          `El tipo de cliente '${createDto.valor}' con nivel de severidad '${createDto.nivelSeveridad}' ya existe`,
-        );
-      } else {
-        throw new BadRequestException(
-          `El valor '${createDto.valor}' ya existe en la categoría '${createDto.categoria}'`,
-        );
-      }
-    }
-
-    let padre;
-
-    if (padreId) {
-      padre = await this.miscellaneousRepository.findOne({
-        where: { _id: new ObjectId(padreId) },
-      });
-
-      if (!padre) {
-        throw new BadRequestException('El elemento padre no existe');
-      }
-
-      if (!padre.activo) {
-        throw new BadRequestException('No se puede asociar a un elemento padre inactivo');
-      }
-    }
-
-    const tipoIncidenciaArray = createDto.tipoIncidencia 
-      ? (Array.isArray(createDto.tipoIncidencia) ? createDto.tipoIncidencia : [createDto.tipoIncidencia])
-      : [];
-
-    const newItem = this.miscellaneousRepository.create({
-      ...createDto,
-      padreId: padre?._id,
-      valor: createDto.valor.toUpperCase(),
-      tipoIncidencia: tipoIncidenciaArray,
-    });
-
-    return await this.miscellaneousRepository.save(newItem);
-  }
-
+  // ✅ MÉTODO DE PAGINADO AGREGADO (Idéntico al patrón de ServiceService)
   async findAllPaginated(
     page: number = 1,
     limit: number = 10,
@@ -189,6 +63,106 @@ export class MiscellaneousService {
     };
   }
 
+  async create(createDto: CreateMiscellaneousDto) {
+    let padreId: string | undefined;
+    let padreNombre: string | undefined;
+
+    switch (createDto.categoria) {
+      case 'SUBCATEGORIA':
+        padreId = createDto.categoriaId;
+        break;
+      case 'DETALLE':
+        padreId = createDto.subcategoriaId;
+        break;
+      case 'CIUDAD':
+        padreId = createDto.estadoId; // <-- Toma el estadoId enviado desde el frontend
+        break;
+      case 'LOCALIDAD':
+        padreId = createDto.ciudadId;
+        break;
+      case 'SOLUCION_CASO':
+        padreId = createDto.causaId;
+        break;
+      case 'TIPO_CLIENTE':
+        if (!createDto.nivelSeveridad) {
+          throw new BadRequestException('Debe proporcionar nivelSeveridad para TIPO_CLIENTE');
+        }
+        padreId = undefined; 
+        break;
+      case 'CATEGORIA_RED':
+      case 'ESTADO':
+      case 'CAUSA_RAIZ':
+      case 'GRUPO_DESTINO':
+      case 'PLATAFORMA':
+      case 'SERVICIO':
+      case 'ULTIMA_MILLA':
+      case 'PROVEEDOR':
+        padreId = undefined;
+        break;
+      default:
+        throw new BadRequestException(`Categoría '${createDto.categoria}' no válida`);
+    }
+
+    const whereQuery: any = {
+      categoria: createDto.categoria,
+      valor: createDto.valor.toUpperCase(),
+    };
+
+    if (createDto.categoria === 'TIPO_CLIENTE' && createDto.nivelSeveridad) {
+      whereQuery.nivelSeveridad = createDto.nivelSeveridad;
+    }
+
+    if (padreId) {
+      whereQuery.padreId = new ObjectId(padreId);
+    }
+
+    const exists = await this.miscellaneousRepository.findOne({ where: whereQuery });
+
+    if (exists) {
+      if (createDto.categoria === 'SOLUCION_CASO') throw new BadRequestException(`La solución '${createDto.valor}' ya está asociada a esta causa raíz`);
+      else if (createDto.categoria === 'LOCALIDAD') throw new BadRequestException(`La localidad '${createDto.valor}' ya está asociada a esta ciudad`);
+      else if (createDto.categoria === 'CIUDAD') throw new BadRequestException(`La ciudad '${createDto.valor}' ya está asociada a este estado`);
+      else if (createDto.categoria === 'SUBCATEGORIA') throw new BadRequestException(`La subcategoría '${createDto.valor}' ya está asociada a esta categoría`);
+      else if (createDto.categoria === 'DETALLE') throw new BadRequestException(`El detalle '${createDto.valor}' ya está asociado a esta subcategoría`);
+      else if (createDto.categoria === 'TIPO_CLIENTE') throw new BadRequestException(`El tipo de cliente '${createDto.valor}' con nivel de severidad '${createDto.nivelSeveridad}' ya existe`);
+      else throw new BadRequestException(`El valor '${createDto.valor}' ya existe en la categoría '${createDto.categoria}'`);
+    }
+
+    let padre;
+    if (padreId) {
+      padre = await this.miscellaneousRepository.findOne({
+        where: { _id: new ObjectId(padreId) },
+      });
+
+      if (!padre) {
+        throw new BadRequestException('El elemento padre no existe');
+      }
+      if (!padre.activo) {
+        throw new BadRequestException('No se puede asociar a un elemento padre inactivo');
+      }
+      
+      // ✅ OBTENER EL NOMBRE DEL PADRE PARA GUARDARLO
+      padreNombre = padre.valor; 
+    }
+
+    const tipoIncidenciaArray = createDto.tipoIncidencia 
+      ? (Array.isArray(createDto.tipoIncidencia) ? createDto.tipoIncidencia : [createDto.tipoIncidencia])
+      : [];
+
+    // ✅ CREAR EL ITEM INCLUYENDO padreId y padreNombre
+    const newItem = this.miscellaneousRepository.create({
+      ...createDto,
+      padreId: padreId ? new ObjectId(padreId) : undefined,
+      padreNombre: padreNombre, // <--- ¡ESTA LÍNEA ES LA CLAVE!
+      valor: createDto.valor.toUpperCase(),
+      tipoIncidencia: tipoIncidenciaArray,
+    });
+
+    console.log('✅ [SERVICE] Ciudad creada con éxito. padreId:', padreId, 'padreNombre:', padreNombre);
+
+    return await this.miscellaneousRepository.save(newItem);
+  }
+
   async findAll(filter: CategoryFilterDto) {
     const whereQuery = Object.entries(filter).reduce(
       (acc, [key, value]) => {
@@ -206,9 +180,7 @@ export class MiscellaneousService {
 
     return await this.miscellaneousRepository.find({
       where: whereQuery,
-      order: {
-        valor: 'ASC',
-      },
+      order: { valor: 'ASC' },
     });
   }
 
@@ -224,10 +196,10 @@ export class MiscellaneousService {
     return item;
   }
 
-  async update(id: string, updateDto: UpdateMiscellaneousDto,  req?: any) {
+  async update(id: string, updateDto: UpdateMiscellaneousDto, req?: any) {
     const item = await this.findOne(id);
 
-       const oldValue = item ? {
+    const oldValue = item ? {
       categoria: item.categoria,
       valor: item.valor,
       padreId: item.padreId,
@@ -237,17 +209,16 @@ export class MiscellaneousService {
       descripcion: item.descripcion,
     } : null;
   
-     if (item && req) {
+    if (item && req) {
       const { _id, __v, createdAt, updatedAt, ...safeOldData } = item as any;
       (req as any).oldValue = safeOldData;
-       console.log('🟡 [SERVICE] oldValue asignado al req. Campos:', Object.keys(safeOldData));
-    }else {
+      console.log('🟡 [SERVICE] oldValue asignado al req. Campos:', Object.keys(safeOldData));
+    } else {
       console.log('🔴 [SERVICE] FALLO: No se asignó oldValue. item existe:', !!item, 'req existe:', !!req);
     }
 
     const nuevoValor = updateDto.valor ? updateDto.valor.trim().toUpperCase() : item.valor;
     const valorCambio = nuevoValor !== item.valor;
-
     const categoriaActual = updateDto.categoria || item.categoria;
     
     let nuevoPadreId: string | undefined;
@@ -309,33 +280,19 @@ export class MiscellaneousService {
       
       if (exists) {
         if (categoriaActual === 'SOLUCION_CASO') {
-          throw new BadRequestException(
-            `La solución '${nuevoValor}' ya está asociada a esta causa raíz`,
-          );
+          throw new BadRequestException(`La solución '${nuevoValor}' ya está asociada a esta causa raíz`);
         } else if (categoriaActual === 'LOCALIDAD') {
-          throw new BadRequestException(
-            `La localidad '${nuevoValor}' ya está asociada a esta ciudad`,
-          );
+          throw new BadRequestException(`La localidad '${nuevoValor}' ya está asociada a esta ciudad`);
         } else if (categoriaActual === 'CIUDAD') {
-          throw new BadRequestException(
-            `La ciudad '${nuevoValor}' ya está asociada a este estado`,
-          );
+          throw new BadRequestException(`La ciudad '${nuevoValor}' ya está asociada a este estado`);
         } else if (categoriaActual === 'SUBCATEGORIA') {
-          throw new BadRequestException(
-            `La subcategoría '${nuevoValor}' ya está asociada a esta categoría`,
-          );
+          throw new BadRequestException(`La subcategoría '${nuevoValor}' ya está asociada a esta categoría`);
         } else if (categoriaActual === 'DETALLE') {
-          throw new BadRequestException(
-            `El detalle '${nuevoValor}' ya está asociado a esta subcategoría`,
-          );
+          throw new BadRequestException(`El detalle '${nuevoValor}' ya está asociado a esta subcategoría`);
         } else if (categoriaActual === 'TIPO_CLIENTE') {
-          throw new BadRequestException(
-            `El tipo de cliente '${nuevoValor}' con nivel de severidad '${updateDto.nivelSeveridad || item.nivelSeveridad}' ya existe`,
-          );
+          throw new BadRequestException(`El tipo de cliente '${nuevoValor}' con nivel de severidad '${updateDto.nivelSeveridad || item.nivelSeveridad}' ya existe`);
         } else {
-          throw new BadRequestException(
-            `El valor '${nuevoValor}' ya existe en esta categoría`,
-          );
+          throw new BadRequestException(`El valor '${nuevoValor}' ya existe en esta categoría`);
         }
       }
     }
@@ -365,9 +322,6 @@ export class MiscellaneousService {
     }
 
     await this.miscellaneousRepository.update(id, updatedData);
-
-   
-
     return this.findOne(id);
   }
 

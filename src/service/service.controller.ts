@@ -30,7 +30,6 @@ export class ServiceController {
       tipoServicio,
       excludeTipo,
       status,
-    
       tipoCliente,
       
     );
