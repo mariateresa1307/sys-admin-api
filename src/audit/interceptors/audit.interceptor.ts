@@ -12,7 +12,7 @@ export class AuditInterceptor implements NestInterceptor {
   constructor(
     private readonly auditService: AuditService,
     private readonly jwtService: JwtService,
-  ) {}
+  ) { }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
@@ -21,10 +21,10 @@ export class AuditInterceptor implements NestInterceptor {
     const handler = context.getHandler().name;
     const module = this.extractModule(controller);
     const clientIp = getClientIp(request);
-
     const isLogout = handler === 'logout' || url.includes('/logout');
     const isLogin = handler === 'login' || url.includes('/login');
     const isUpdate = method === 'PUT' || method === 'PATCH';
+    const isDelete = method === 'DELETE';
 
     let userEmail = user?.email;
     let userId = user?.sub || user?._id;
@@ -56,7 +56,10 @@ export class AuditInterceptor implements NestInterceptor {
           else if (method === 'DELETE') action = AuditAction.DELETE;
 
           if (action && (user || isLogout || isLogin)) {
-            const oldValue = isUpdate ? (request as any).oldValue : undefined;
+            const oldValue = (isUpdate || isDelete) ? (request as any).oldValue : undefined;
+            console.log('🔍 [INTERCEPTOR] isDelete:', isDelete);
+            console.log('🔍 [INTERCEPTOR] oldValue capturado:', oldValue);
+            console.log('🔍 [INTERCEPTOR] request.oldValue:', (request as any).oldValue);
 
             let detailsMessage = '';
             let recordIdToSave = params?.id;
@@ -71,28 +74,30 @@ export class AuditInterceptor implements NestInterceptor {
               const subj = oldValue.subject || 'Sin asunto';
 
               detailsMessage = `Actualización en TICKET: ${caseNum} - ${subj}`;
-              recordIdToSave = caseNum; 
+              recordIdToSave = caseNum;
 
             } else if (isUpdate && (module === 'USER' || module === 'USERS') && oldValue) {
 
               const email = oldValue.email || 'S/N';
               const name = `${oldValue.primerNombre || ''} ${oldValue.primerApellido || ''}`.trim() || 'Sin nombre';
-             
+
               detailsMessage = `Actualización en USUARIO: ${email} - ${name}`;
 
             } else if (isUpdate && module === 'MISCELLANEOUS' && oldValue) {
-              
+
               const cat = oldValue.categoria || 'S/N';
               const val = oldValue.valor || 'Sin valor';
 
               detailsMessage = `Actualización en MISCELLANEOUS: ${cat} - ${val}`;
 
             } else if (isUpdate && (module === 'SERVICE' || module === 'SERVICES') && oldValue) {
-              
+
               const name = oldValue.name || oldValue.id_circuito || 'S/N';
               detailsMessage = `Actualización en SERVICIO: ${name}`;
+            } else if (isDelete && oldValue) {
+              const val = oldValue.valor || oldValue.name || oldValue.email || oldValue.subject || 'Registro';
+              detailsMessage = `Eliminación en ${module}: ${val}`;
             } else {
-             
               detailsMessage = `${action} en ${module}${params?.id ? ` (ID: ${params.id})` : ''}`;
             }
 

@@ -7,17 +7,16 @@ import { Miscellaneous } from './entities/miscellaneous.entity';
 import { CreateMiscellaneousDto } from './dto/create-miscellaneous.dto';
 import { UpdateMiscellaneousDto } from './dto/update-miscellaneous.dto';
 import { CategoryFilterDto } from './dto/categoryFilter.dto';
-import { AuditService } from '../audit/audit.service'; 
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class MiscellaneousService {
   constructor(
     @InjectRepository(Miscellaneous)
     private readonly miscellaneousRepository: MongoRepository<Miscellaneous>,
-    private readonly auditService: AuditService, 
-  ) {}
+    private readonly auditService: AuditService,
+  ) { }
 
-  // ✅ MÉTODO DE PAGINADO AGREGADO (Idéntico al patrón de ServiceService)
   async findAllPaginated(
     page: number = 1,
     limit: number = 10,
@@ -43,11 +42,11 @@ export class MiscellaneousService {
     console.log('🔍 [SERVICE] Filtro MongoDB:', JSON.stringify(where));
 
     const [data, total] = await Promise.all([
-      this.miscellaneousRepository.find({ 
-        where, 
-        skip, 
-        take, 
-        order: { valor: 'ASC' } 
+      this.miscellaneousRepository.find({
+        where,
+        skip,
+        take,
+        order: { valor: 'ASC' }
       } as any),
       this.miscellaneousRepository.count(where as any),
     ]);
@@ -75,7 +74,7 @@ export class MiscellaneousService {
         padreId = createDto.subcategoriaId;
         break;
       case 'CIUDAD':
-        padreId = createDto.estadoId; // <-- Toma el estadoId enviado desde el frontend
+        padreId = createDto.estadoId;
         break;
       case 'LOCALIDAD':
         padreId = createDto.ciudadId;
@@ -87,7 +86,7 @@ export class MiscellaneousService {
         if (!createDto.nivelSeveridad) {
           throw new BadRequestException('Debe proporcionar nivelSeveridad para TIPO_CLIENTE');
         }
-        padreId = undefined; 
+        padreId = undefined;
         break;
       case 'CATEGORIA_RED':
       case 'ESTADO':
@@ -140,12 +139,12 @@ export class MiscellaneousService {
       if (!padre.activo) {
         throw new BadRequestException('No se puede asociar a un elemento padre inactivo');
       }
-      
+
       // ✅ OBTENER EL NOMBRE DEL PADRE PARA GUARDARLO
-      padreNombre = padre.valor; 
+      padreNombre = padre.valor;
     }
 
-    const tipoIncidenciaArray = createDto.tipoIncidencia 
+    const tipoIncidenciaArray = createDto.tipoIncidencia
       ? (Array.isArray(createDto.tipoIncidencia) ? createDto.tipoIncidencia : [createDto.tipoIncidencia])
       : [];
 
@@ -208,7 +207,7 @@ export class MiscellaneousService {
       tipoIncidencia: item.tipoIncidencia,
       descripcion: item.descripcion,
     } : null;
-  
+
     if (item && req) {
       const { _id, __v, createdAt, updatedAt, ...safeOldData } = item as any;
       (req as any).oldValue = safeOldData;
@@ -220,7 +219,7 @@ export class MiscellaneousService {
     const nuevoValor = updateDto.valor ? updateDto.valor.trim().toUpperCase() : item.valor;
     const valorCambio = nuevoValor !== item.valor;
     const categoriaActual = updateDto.categoria || item.categoria;
-    
+
     let nuevoPadreId: string | undefined;
     let padreCambio = false;
 
@@ -277,7 +276,7 @@ export class MiscellaneousService {
       }
 
       const exists = await this.miscellaneousRepository.findOne({ where: whereQuery });
-      
+
       if (exists) {
         if (categoriaActual === 'SOLUCION_CASO') {
           throw new BadRequestException(`La solución '${nuevoValor}' ya está asociada a esta causa raíz`);
@@ -299,8 +298,8 @@ export class MiscellaneousService {
 
     let tipoIncidenciaArray = item.tipoIncidencia || [];
     if (updateDto.tipoIncidencia !== undefined) {
-      tipoIncidenciaArray = Array.isArray(updateDto.tipoIncidencia) 
-        ? updateDto.tipoIncidencia 
+      tipoIncidenciaArray = Array.isArray(updateDto.tipoIncidencia)
+        ? updateDto.tipoIncidencia
         : [updateDto.tipoIncidencia].filter(Boolean);
     }
 
@@ -314,7 +313,7 @@ export class MiscellaneousService {
       const padre = await this.miscellaneousRepository.findOne({
         where: { _id: new ObjectId(nuevoPadreId) },
       });
-      
+
       if (padre) {
         updatedData.padreId = new ObjectId(nuevoPadreId);
         updatedData.padreNombre = padre.valor;
@@ -325,8 +324,21 @@ export class MiscellaneousService {
     return this.findOne(id);
   }
 
-  async remove(id: string) {
+  async remove(id: string, req?: any) {
     const item = await this.findOne(id);
+
+
+    console.log('🔍 [SERVICE] Item encontrado:', item?.valor);
+    console.log(' [SERVICE] req recibido:', !!req);
+
+    if (item && req) {
+      const { _id, __v, createdAt, updatedAt, ...safeOldData } = item as any;
+      (req as any).oldValue = safeOldData;
+      console.log('🟡 [SERVICE] oldValue asignado al req (DELETE). Campos:', Object.keys(safeOldData));
+    } else {
+      console.log('🔴 [SERVICE] FALLO (DELETE): No se asignó oldValue. item existe:', !!item, 'req existe:', !!req);
+    }
+
 
     if (item.categoria === 'CIUDAD') {
       await this.miscellaneousRepository.delete({

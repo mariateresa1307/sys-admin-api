@@ -106,7 +106,7 @@ async debugStatus() {
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string ) {
     console.log('️ [BACKEND] Eliminando usuario con ID:', id);
     return await this.serviceService.removeService(id);
   }

@@ -76,7 +76,7 @@ export class MiscellaneousController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.miscellaneousService.remove(id);
+ remove(@Param('id') id: string, @Req() req: Request) {
+    return this.miscellaneousService.remove(id, req);
   }
 }
