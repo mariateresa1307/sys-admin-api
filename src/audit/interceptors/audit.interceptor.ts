@@ -1,6 +1,6 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
+import { Observable, throwError } from 'rxjs';
+import { tap, catchError } from 'rxjs/operators';
 import { AuditService } from '../audit.service';
 import { AuditAction } from '../../auth/entities/audit-log.entity';
 import { getClientIp } from '../../utils/constants/get-client-ip';
@@ -9,6 +9,8 @@ import { AUDIT_MODULES } from '../../utils/constants/audit-modules';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(AuditInterceptor.name);
+
   constructor(
     private readonly auditService: AuditService,
     private readonly jwtService: JwtService,
@@ -29,6 +31,10 @@ export class AuditInterceptor implements NestInterceptor {
     let userEmail = user?.email;
     let userId = user?.sub || user?._id;
 
+if ((isLogin || isLogout) && !userEmail) {
+      userEmail = body?.email;
+    }
+
     if (!userEmail || !userId) {
       try {
         const authHeader = headers.authorization;
@@ -44,6 +50,8 @@ export class AuditInterceptor implements NestInterceptor {
       }
     }
 
+     const hasIdentity = Boolean(userEmail || userId);
+     
     return next.handle().pipe(
       tap(async (response) => {
         try {
@@ -64,12 +72,13 @@ export class AuditInterceptor implements NestInterceptor {
             let detailsMessage = '';
             let recordIdToSave = params?.id;
 
-            if (isLogout) {
+             if (isLogout) {
               detailsMessage = `Logout de usuario ${userEmail || 'desconocido'}`;
             } else if (isLogin) {
+
               detailsMessage = `Login de usuario ${userEmail || 'desconocido'}`;
             } else if (isUpdate && (module === 'TICKET' || module === 'TICKETS') && oldValue) {
-
+              
               const caseNum = oldValue.caseNumber || 'S/N';
               const subj = oldValue.subject || 'Sin asunto';
 
@@ -123,9 +132,28 @@ export class AuditInterceptor implements NestInterceptor {
             console.log('✅ [INTERCEPTOR] Log creado exitosamente');
           }
         } catch (error) {
-          console.error('❌ [AuditInterceptor] Error creating audit log:', error);
+          this.logger.error('Error creating audit log', error);
         }
       }),
+ catchError((error) => {
+        if (isLogin) {
+          const attemptedEmail = body?.email || 'desconocido';
+
+          this.auditService
+            .createLog({
+              userId: 'SYSTEM',
+              userEmail: attemptedEmail,
+              action: AuditAction.LOGIN_FAILED,
+              moduleId: AUDIT_MODULES.AUTH,
+              ipAddress: clientIp,
+              userAgent: headers['user-agent'],
+              details: `Intento de login fallido: ${attemptedEmail}`,
+            } as any)
+            .catch((e) => this.logger.error('Error logging failed login', e));
+        }
+        return throwError(() => error);
+      }),
+
     );
   }
 

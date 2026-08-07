@@ -78,13 +78,14 @@ export class TicketController {
     return ticket;
   }
 
-    @Put(':id/close')
+ @Put(':id/close')
   async closeTicket(
     @Param('id') id: string,
     @Req() req: Request,
   ) {
     return this.ticketService.closeTicket(id, req);
   }
+
 
   @Put(':id/reopen')
   async reopenTicket(

@@ -17,6 +17,7 @@ import { Request } from 'express';
 import { AuditLog } from '../auth/entities/audit-log.entity';
 import { Miscellaneous } from '../miscellaneous/entities/miscellaneous.entity';
 import { Service } from '../service/entities/service.entity';
+import { getClientIp } from '../utils/constants/get-client-ip';
 
 @Injectable()
 export class TicketService {
@@ -210,8 +211,13 @@ export class TicketService {
       where.subject = { $regex: filters.subject.trim(), $options: 'i' };
     }
 
-    if (filters.status?.trim()) {
-      where.status = filters.status.trim();
+     if (filters.status?.trim()) {
+      const statusArray = filters.status.trim().split(',');
+      if (statusArray.length > 1) {
+        where.status = { $in: statusArray };
+      } else {
+        where.status = filters.status.trim();
+      }
     } else if (filters.excludeStatus?.trim()) {
       where.status = { $ne: filters.excludeStatus.trim() };
     }
@@ -250,13 +256,19 @@ export class TicketService {
 
     if (Array.isArray(ticket.serviciosAfectados) && ticket.serviciosAfectados.length > 0) {
       try {
+        // Extraer IDs tanto si son strings como si son objetos con _id
         const idsValidos = ticket.serviciosAfectados
-          .filter((id: any) => typeof id === 'string' && id.length === 24);
+          .map((item: any) => {
+            if (typeof item === 'string' && item.length === 24) return item;
+            if (typeof item === 'object' && item !== null && item._id) return String(item._id);
+            return null;
+          })
+          .filter((idStr: string | null): idStr is string => idStr !== null);
         
         if (idsValidos.length > 0) {
           const serviciosEncontrados = await this.serviceRepository.find({
             where: {
-              _id: { $in: idsValidos.map((id: string) => new ObjectId(id)) }
+              _id: { $in: idsValidos.map((idStr: string) => new ObjectId(idStr)) }
             } as any
           });
           
@@ -320,7 +332,6 @@ export class TicketService {
     return updatedTicket;
   }
 
-  // ✅ CORREGIDO: También actualiza updatedAt al cerrar
   async closeTicket(id: string, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
     try {
@@ -364,15 +375,14 @@ export class TicketService {
       );
     }
 
-    const updateData = {
-      status: TICKET_STATUS.CERRADO,
-      horaCierreFalla: horaCierre,
-      horaCierre: horaCierre,
-      description: finalDescription,
-      descripcion: finalDescription,
-      bitacora: finalDescription,
-      updatedAt: new Date(), // ✅ Fuerza la actualización de la fecha de modificación
-    };
+     const updateData: any = {
+    status: TICKET_STATUS.CERRADO,
+    horaCierreFalla: horaCierre,
+    horaCierre: horaCierre,
+    description: finalDescription,
+    descripcion: finalDescription,
+    updatedAt: new Date(),
+  };
 
     await this.ticketRepository.updateOne(
       { _id: objectId },
@@ -453,14 +463,16 @@ export class TicketService {
     details: string,
   ) {
     try {
+       const rawUserId = user?.sub ?? user?._id;
+      const userEmail = user?.email ?? user?.userEmail;
       const auditData = {
-        userId: user?._id ? new ObjectId(user._id) : undefined,
-        userEmail: user?.userEmail || undefined,
+        userId: rawUserId ? this.safeObjectId(rawUserId) : undefined,
+        userEmail: userEmail || undefined,
         action,
         moduleId,
         oldValue: oldValue ? JSON.stringify(oldValue) : undefined,
         newValue: newValue ? JSON.stringify(newValue) : undefined,
-        ipAddress: req.ip,
+        ipAddress: getClientIp(req),
         recordId,
         eventDate: new Date(),
         details,
@@ -469,6 +481,14 @@ export class TicketService {
       await this.auditLogRepository.save(auditLog);
     } catch (error) {
       console.error('❌ Error creando log de auditoría:', error);
+    }
+  }
+  private safeObjectId(id: any): ObjectId | undefined {
+    if (!id) return undefined;
+    try {
+      return new ObjectId(id);
+    } catch {
+      return undefined;
     }
   }
 
