@@ -20,18 +20,21 @@ export class AuditController {
     return this.auditService.getStats(filterDto);
   }
 
-  @Get('export')
+ @Get('export')
   async exportExcel(
     @Query() filterDto: AuditFilterDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const buffer = await this.auditService.exportLogsToExcel(filterDto);
     const fileName = `auditoria-${new Date().toISOString().split('T')[0]}.xlsx`;
+    
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+   
+    res.setHeader('Content-Length', String(buffer.length));
     res.send(buffer);
   }
 

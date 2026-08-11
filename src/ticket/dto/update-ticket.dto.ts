@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsArray,
 } from 'class-validator';
+import { CreateDateColumn } from 'typeorm';
 
 export class UpdateTicketDto {
   @IsString()
@@ -172,4 +173,8 @@ export class UpdateTicketDto {
   @IsBoolean()
   @IsOptional()
   afectacion?: boolean;
+
+   @CreateDateColumn()
+    @IsOptional()
+    fechaAsignacionOpA?: Date;
 }

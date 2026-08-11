@@ -191,7 +191,7 @@ export class UsersService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Error al actualizar base de datos',
+        'Error al Guardar valida los datos ',
       );
     }
   }

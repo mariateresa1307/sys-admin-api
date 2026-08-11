@@ -14,7 +14,6 @@ export class AuditService {
     private readonly auditLogRepository: MongoRepository<AuditLog>,
   ) {}
 
-  // ✅ FUNCIÓN AUXILIAR SEGURA: Evita que el servidor crashee si el ID no es válido
   private safeObjectId(id: any): any {
     if (!id) return null;
     try {
@@ -363,6 +362,6 @@ export class AuditService {
     worksheet.views = [{ state: 'frozen', ySplit: 5 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
-    return buffer as unknown as Buffer;
+     return Buffer.from(buffer as unknown as Uint8Array);
   }
 }

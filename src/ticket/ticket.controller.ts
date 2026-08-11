@@ -1,4 +1,5 @@
-import {  Body, Controller,  Get,  Param,  Post, Patch,  Put, Query,  UsePipes, ValidationPipe,  UseGuards, Req 
+import {
+  Body, Controller, Get, Param, Post, Patch, Put, Query, UsePipes, ValidationPipe, UseGuards, Req
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { TicketService } from './ticket.service';
@@ -14,13 +15,14 @@ import { UpdateTicketDto } from './dto/update-ticket.dto';
     forbidNonWhitelisted: true,
   }),
 )
-@UseGuards(JwtAuthGuard) 
+@UseGuards(JwtAuthGuard)
 export class TicketController {
-  constructor(private readonly ticketService: TicketService) {}
+  constructor(private readonly ticketService: TicketService) { }
 
   @Post()
-  async create(@Body() createTicketDto: TicketDto) {
-    const ticket = await this.ticketService.createTicket(createTicketDto);
+  async create(@Body() createTicketDto: TicketDto, @Req() req: Request) {
+   const userId = (req.user as any)?._id || (req.user as any)?.id;
+    const ticket = await this.ticketService.createTicket(createTicketDto, userId);
     return ticket;
   }
 
@@ -51,6 +53,19 @@ export class TicketController {
     return stats;
   }
 
+  @Get('reporte-incidencias')
+  async reporteIncidencias(
+    @Query('mes') mes?: string,
+    @Query('tipoServicio') tipoServicio?: string,
+  ) {
+    const now = new Date();
+    const mesDefault = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+    const mesValido = mes && /^\d{4}-\d{2}$/.test(mes) ? mes : mesDefault;
+
+    return this.ticketService.getReporteIncidencias(mesValido, tipoServicio);
+  }
+
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     const ticket = await this.ticketService.findTicketById(id);
@@ -71,14 +86,14 @@ export class TicketController {
   async update(
     @Param('id') id: string,
     @Body() updateTicketDto: UpdateTicketDto,
-    @Req() req: Request 
+    @Req() req: Request
   ) {
 
     const ticket = await this.ticketService.updateTicket(id, updateTicketDto, req);
     return ticket;
   }
 
- @Put(':id/close')
+  @Put(':id/close')
   async closeTicket(
     @Param('id') id: string,
     @Req() req: Request,

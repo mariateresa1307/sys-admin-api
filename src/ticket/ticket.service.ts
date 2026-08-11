@@ -33,7 +33,7 @@ export class TicketService {
     private readonly serviceRepository: MongoRepository<Service>,
   ) {}
 
-  async createTicket(createTicketDto: TicketDto): Promise<Ticket> {
+  async createTicket(createTicketDto: TicketDto,  userId?: string): Promise<Ticket> {
     let attempts = 0;
     const maxAttempts = 3;
     let currentCaseNumber = createTicketDto.caseNumber;
@@ -47,6 +47,7 @@ export class TicketService {
         const newTicket = this.ticketRepository.create({
           ...createTicketDto,
           caseNumber: currentCaseNumber,
+          operatorResponsable: userId || undefined,
         });
         const savedTicket = await this.ticketRepository.save(newTicket);
         return Array.isArray(savedTicket) ? savedTicket[0]! : savedTicket;
@@ -56,6 +57,7 @@ export class TicketService {
       const prefix = currentCaseNumber.split('-')[0] || 'TCK';
       const randomNum = Math.floor(100000 + Math.random() * 900000);
       currentCaseNumber = `${prefix}-${randomNum}`;
+      
     }
 
     throw new BadRequestException('No se pudo generar un número de ticket único. Intente nuevamente.');
@@ -73,6 +75,9 @@ export class TicketService {
       operatorId?: string;
     } = {},
   ) {
+     console.log('🔍 [findAllPaginated] Filtros recibidos:', filters);
+  console.log('🔍 [findAllPaginated] Status enviado:', JSON.stringify(filters.status));
+  
     const take = limit > 0 ? limit : 10;
     const skip = page > 1 ? (page - 1) * take : 0;
     const where = this.buildSearchFilter(filters);
@@ -193,53 +198,67 @@ export class TicketService {
     }));
   }
 
-  private buildSearchFilter(filters: {
-    caseNumber?: string;
-    subject?: string;
-    status?: string;
-    excludeStatus?: string; 
-    primerNombre?: string;
-    operatorId?: string;
-  }) {
-    const where: Record<string, unknown> = {};
+private buildSearchFilter(filters: {
+  caseNumber?: string;
+  subject?: string;
+  status?: string;
+  excludeStatus?: string; 
+  primerNombre?: string;
+  operatorId?: string;
+}) {
+  const where: Record<string, unknown> = {};
 
-    if (filters.caseNumber?.trim()) {
-      where.caseNumber = { $regex: filters.caseNumber.trim(), $options: 'i' };
-    }
-
-    if (filters.subject?.trim()) {
-      where.subject = { $regex: filters.subject.trim(), $options: 'i' };
-    }
-
-     if (filters.status?.trim()) {
-      const statusArray = filters.status.trim().split(',');
-      if (statusArray.length > 1) {
-        where.status = { $in: statusArray };
-      } else {
-        where.status = filters.status.trim();
-      }
-    } else if (filters.excludeStatus?.trim()) {
-      where.status = { $ne: filters.excludeStatus.trim() };
-    }
-
-    if (filters.operatorId?.trim()) {
-      where.$or = [
-        { operatorAsignado: filters.operatorId.trim() },
-        { operatorResponsable: filters.operatorId.trim() },
-      ];
-    }
-
-    if (filters.primerNombre?.trim()) {
-      const term = filters.primerNombre.trim();
-      where.$or = [
-        { operatorResponsable: { $regex: term, $options: 'i' } },
-        { operatorAsignado: { $regex: term, $options: 'i' } },
-        { operador: { $regex: term, $options: 'i' } },
-      ];
-    }
-
-    return Object.keys(where).length > 0 ? where : null;
+  if (filters.caseNumber?.trim()) {
+    where.caseNumber = { $regex: filters.caseNumber.trim(), $options: 'i' };
   }
+
+  if (filters.subject?.trim()) {
+    where.subject = { $regex: filters.subject.trim(), $options: 'i' };
+  }
+
+  // ✅ FIX: Status case-insensitive + trim por valor
+  if (filters.status?.trim()) {
+    const statusArray = filters.status
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    
+    console.log('🔍 [buildSearchFilter] Status array procesado:', statusArray);
+    
+    if (statusArray.length > 1) {
+      // ✅ Cada status como regex case-insensitive
+      where.status = {
+        $in: statusArray.map(s => new RegExp(`^${s}$`, 'i')),
+      };
+    } else if (statusArray.length === 1) {
+      where.status = new RegExp(`^${statusArray[0]}$`, 'i');
+    }
+  } else if (filters.excludeStatus?.trim()) {
+    where.status = {
+      $not: new RegExp(`^${filters.excludeStatus.trim()}$`, 'i'),
+    };
+  }
+
+  if (filters.operatorId?.trim()) {
+    where.$or = [
+      { operatorAsignado: filters.operatorId.trim() },
+      { operatorResponsable: filters.operatorId.trim() },
+    ];
+  }
+
+  if (filters.primerNombre?.trim()) {
+    const term = filters.primerNombre.trim();
+    // ⚠️ OJO: esto sobreescribe el $or anterior si operatorId también estaba
+    where.$or = [
+      { operatorResponsable: { $regex: term, $options: 'i' } },
+      { operatorAsignado: { $regex: term, $options: 'i' } },
+      { operador: { $regex: term, $options: 'i' } },
+    ];
+  }
+
+  console.log('🔍 [buildSearchFilter] Where final:', JSON.stringify(where, null, 2));
+  return Object.keys(where).length > 0 ? where : null;
+}
 
   async findTicketById(id: string): Promise<Ticket> {
     let objectId: ObjectId;
@@ -288,7 +307,6 @@ export class TicketService {
     };
   }
 
-  // ✅ CORREGIDO: Lógica limpia y única, con updatedAt forzado
   async updateTicket(
     id: string,
     updateTicketDto: UpdateTicketDto,
@@ -311,7 +329,10 @@ export class TicketService {
       (req as any).oldValue = await this.enrichTicketForAudit(oldTicket);
     }
 
-    // ✅ Fuerza la actualización de la fecha de modificación
+    if (updateTicketDto.operatorAsignado && 
+      updateTicketDto.operatorAsignado !== oldTicket?.operatorAsignado) {
+    updateData.fechaAsignacionOpA = new Date().toISOString();
+  }
     updateData.updatedAt = new Date();
 
     const result = await this.ticketRepository.updateOne(
@@ -483,6 +504,7 @@ export class TicketService {
       console.error('❌ Error creando log de auditoría:', error);
     }
   }
+
   private safeObjectId(id: any): ObjectId | undefined {
     if (!id) return undefined;
     try {
@@ -574,5 +596,99 @@ export class TicketService {
       casosActivos,
       casosCerrados,
     };
+  }
+
+  // ✅ REPORTE: incidencias por servicio con agregación en MongoDB (server-side)
+  async getReporteIncidencias(mes: string, tipoServicio?: string) {
+    // Rango del mes: [inicio, inicio del mes siguiente)
+    const [year, month] = mes.split('-').map(Number);
+    const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+    const end = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
+
+    const pipeline: any[] = [
+      // 1️⃣ Solo tickets del mes seleccionado
+      { $match: { createdAt: { $gte: start, $lt: end } } },
+
+      // 2️⃣ Un documento por cada servicio afectado (desenrolla el array)
+      { $unwind: '$serviciosAfectados' },
+
+      // 3️⃣ Convertir el string a ObjectId de forma segura (inválidos → null)
+      {
+        $addFields: {
+          servicioIdObj: {
+            $convert: { input: '$serviciosAfectados', to: 'objectId', onError: null, onNull: null },
+          },
+        },
+      },
+      { $match: { servicioIdObj: { $ne: null } } },
+
+      // 4️⃣ Join con servicios para obtener tipo y campos técnicos
+      {
+        $lookup: {
+          from: 'services',
+          localField: 'servicioIdObj',
+          foreignField: '_id',
+          as: 'servicioDoc',
+        },
+      },
+      { $unwind: { path: '$servicioDoc', preserveNullAndEmptyArrays: false } },
+    ];
+
+    // 5️⃣ Filtro opcional por tipo de servicio (aplicado en servidor)
+    if (tipoServicio) {
+      pipeline.push({ $match: { 'servicioDoc.tipoServicio': tipoServicio } });
+    }
+
+    // 6️⃣ Agrupación por servicio con todas las métricas que necesita el frontend
+    pipeline.push(
+      {
+        $group: {
+          _id: '$servicioDoc._id',
+          tipoServicio: { $first: { $ifNull: ['$servicioDoc.tipoServicio', 'N/A'] } },
+          servicioNombre: {
+            $first: { $ifNull: ['$servicioDoc.name', { $ifNull: ['$servicioDoc.id_circuito', 'Servicio desconocido'] }] },
+          },
+          id_circuito: { $first: '$servicioDoc.id_circuito' },
+          id_netuno: { $first: '$servicioDoc.id_netuno' },
+          contrato: { $first: '$servicioDoc.contrato' },
+          ultimaMilla: { $first: '$servicioDoc.ultimaMilla' },
+          proveedorDelServicioCompartido: { $first: '$servicioDoc.proveedorDelServicioCompartido' },
+          totalIncidencias: { $sum: 1 },
+          abiertas: {
+            $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'cerrado'] }, 0, 1] },
+          },
+          cerradas: {
+            $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'cerrado'] }, 1, 0] },
+          },
+          ultimaIncidencia: { $max: '$createdAt' },
+          tickets: {
+            $push: {
+              _id: { $toString: '$_id' },
+              caseNumber: { $ifNull: ['$caseNumber', 'S/N'] },
+              subject: { $ifNull: ['$subject', 'Sin asunto'] },
+              status: { $ifNull: ['$status', 'N/A'] },
+              createdAt: '$createdAt',
+              incidentType: { $ifNull: ['$incidentType', 'Sin Clasificar'] },
+            },
+          },
+        },
+      },
+      { $sort: { totalIncidencias: -1 } },
+    );
+
+    const servicios = await this.ticketRepository.aggregate(pipeline).toArray();
+
+    // Totales ligeros (sobre el resultado ya agregado, no sobre la colección completa)
+    const totales = servicios.reduce(
+      (acc: any, s: any) => ({
+        total: acc.total + s.totalIncidencias,
+        abiertas: acc.abiertas + s.abiertas,
+        cerradas: acc.cerradas + s.cerradas,
+        servicios: acc.servicios + 1,
+      }),
+      { total: 0, abiertas: 0, cerradas: 0, servicios: 0 },
+    );
+
+    return { servicios, totales };
   }
 }
