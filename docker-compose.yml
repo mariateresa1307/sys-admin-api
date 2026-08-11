@@ -40,6 +40,18 @@ services:
     networks:
       - backend-network
 
+  frontend:
+    build:
+      context: ../sistema-admin/
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app-react
+      - /app-react/node_modules
+    networks:
+      - backend-network
+
 volumes:
   mongo_data:
 
