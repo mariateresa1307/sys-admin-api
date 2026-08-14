@@ -21,6 +21,9 @@ export class AuditInterceptor implements NestInterceptor {
     const { method, body, params, user, headers, url } = request;
     const controller = context.getClass().name;
     const handler = context.getHandler().name;
+     if (controller === 'UserSessionsController') {
+      return next.handle();
+    }
     const module = this.extractModule(controller);
     const clientIp = getClientIp(request);
     const isLogout = handler === 'logout' || url.includes('/logout');
