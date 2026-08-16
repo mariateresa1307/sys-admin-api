@@ -1,8 +1,8 @@
 import {
   ConflictException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
+  BadRequestException,
   OnModuleInit,
   Logger,
 } from '@nestjs/common';
@@ -40,6 +40,67 @@ export class ServiceService implements OnModuleInit {
     }
   }
 
+
+    private async validateUniqueFields(
+    serviceId: string | undefined,
+    tipoServicio?: string,
+    data?: any,
+  ) {
+    if (!tipoServicio) {
+      return;
+    }
+
+    const conditions: any[] = [];
+
+    if (tipoServicio === 'RBS') {
+      if (data.id_circuito) conditions.push({ id_circuito: data.id_circuito });
+      if (data.idRBS) conditions.push({ idRBS: data.idRBS });
+      if (data.serialONT) conditions.push({ serialONT: data.serialONT });
+    } else if (tipoServicio === 'METROLAN') {
+      if (data.id_circuito) conditions.push({ id_circuito: data.id_circuito });
+      if (data.contrato) conditions.push({ contrato: Number(data.contrato) });
+      if (data.serialONT) conditions.push({ serialONT: data.serialONT });
+    } else if (tipoServicio === 'DOG') {
+      if (data.id_circuito) conditions.push({ id_circuito: data.id_circuito });
+      if (data.id_netuno) conditions.push({ id_netuno: data.id_netuno });
+      if (data.contrato) conditions.push({ contrato: Number(data.contrato) });
+      if (data.serialONT) conditions.push({ serialONT: data.serialONT });
+    } else if (tipoServicio === 'REDES COMPARTIDAS') {
+      if (data.ipNetuno) conditions.push({ ipNetuno: data.ipNetuno });
+      if (data.contrato) conditions.push({ contrato: Number(data.contrato) });
+    }
+
+    if (conditions.length > 0) {
+      // Buscar cualquiera de las condiciones sin excluir por _id aún
+      const existing = await this.serviceRepository.findOne({ 
+        where: { $or: conditions } as any 
+      });
+      
+      // Si existe, verificar que NO sea el mismo registro que se está editando
+      if (existing && serviceId && String(existing._id) === String(serviceId)) {
+        // Es el mismo registro, no es duplicado → permitir actualización
+        return;
+      }
+
+      if (existing) {
+        const conflicts: string[] = [];
+        if (data.id_circuito && existing.id_circuito === data.id_circuito) conflicts.push('ID Circuito');
+        if (data.idRBS && existing.idRBS === data.idRBS) conflicts.push('ID RBS');
+        if (data.id_netuno && existing.id_netuno === data.id_netuno) conflicts.push('ID Netuno');
+        if (data.contrato && String(existing.contrato) === String(data.contrato)) conflicts.push('Contrato');
+        if (data.serialONT && existing.serialONT === data.serialONT) conflicts.push('Serial ONT');
+        if (data.ipNetuno && existing.ipNetuno === data.ipNetuno) conflicts.push('IP Netuno');
+
+        const camposTexto = conflicts.length > 1 
+          ? `los campos ${conflicts.join(' y ')}` 
+          : `el campo ${conflicts[0]}`;
+          
+        throw new BadRequestException(`${camposTexto} ya existe, debes validar la información.`);
+      }
+    }
+  }
+
+
   async findAllPaginated(
     page = 1,
     limit = 10,
@@ -49,12 +110,20 @@ export class ServiceService implements OnModuleInit {
     status?: string,
     tipoCliente?: string,
     vlan?: number | null,
+    nodos?: string,
   ) {
     const take = limit > 0 ? limit : 10;
     const skip = page > 1 ? (page - 1) * take : 0;
     const where: any = {};
 
-    if (search?.trim()) {
+      if (nodos?.trim()) {
+      const searchRegex = { $regex: nodos.trim(), $options: 'i' };
+      where.$or = [
+        { nodoA: searchRegex },
+        { nodoB: searchRegex },
+        { nodoOLT: searchRegex }
+      ];
+    } else if (search?.trim()) {
       where.$or = [
         { name: { $regex: search.trim(), $options: 'i' } },
         { id_circuito: { $regex: search.trim(), $options: 'i' } },
@@ -97,11 +166,9 @@ export class ServiceService implements OnModuleInit {
     };
   }
 
-  // ✅ FIX: Acepta req para capturar oldValue antes del soft-delete
   async remove(id: string, req?: any): Promise<void> {
     const service = await this.findServiceById(new ObjectId(id));
 
-    // ✅ Capturar estado anterior para auditoría (el interceptor lee req.oldValue en DELETE)
     if (req) {
       const { _id: _, ...safeOldData } = service as any;
       (req as any).oldValue = safeOldData;
@@ -111,35 +178,66 @@ export class ServiceService implements OnModuleInit {
     await this.serviceRepository.save(service);
   }
 
-  async updateService(id: string, data: any, req?: any) {
-    const { _id, ...updateData } = data;
-
+  async updateService(id: string, data: any, req?: any): Promise<any> {
     try {
-      // ✅ PASO 1: Capturar el estado actual ANTES de actualizar
-      const currentService = await this.serviceRepository.findOne({ _id: new ObjectId(id) } as any);
+      console.log(`🔄 [updateService] Actualizando servicio ID: ${id}`);
+      console.log(`📦 [updateService] Datos recibidos:`, data);
 
-      if (currentService && req) {
+      const currentService = await this.serviceRepository.findOne({ 
+        _id: new ObjectId(id) 
+      } as any);
+
+      if (!currentService) {
+        throw new NotFoundException('Servicio no encontrado');
+      }
+
+      console.log(`✅ [updateService] Servicio encontrado:`, currentService._id);
+
+      const tipoServicioParaValidar = data.tipoServicio || currentService.tipoServicio;
+      console.log(` [updateService] Tipo de servicio para validar: ${tipoServicioParaValidar}`);
+
+      await this.validateUniqueFields(id, tipoServicioParaValidar, data);
+
+      // Lógica de auditoría existente
+      if (req) {
         const { _id: _, ...safeOldData } = currentService as any;
         (req as any).oldValue = safeOldData;
       }
 
-      // ✅ PASO 2: Realizar la actualización
       const result = await this.serviceRepository.updateOne(
         { _id: new ObjectId(id) },
-        { $set: updateData },
+        { $set: data },
       );
 
       if (result.matchedCount === 0) {
         throw new NotFoundException('Servicio no encontrado');
       }
-
-      return { success: true };
-    } catch (error: any) {
-      this.logger.error(`Error en updateService: ${error.message}`, error.stack);
-      if (error.code === 11000) {
-        throw new ConflictException('El ID ya existe en otro servicio');
+      
+      if (req) {
+        const updatedService = await this.serviceRepository.findOne({ 
+          _id: new ObjectId(id) 
+        } as any);
+        if (updatedService) {
+          const { _id: _, ...safeNewData } = updatedService as any;
+          (req as any).newValue = safeNewData;
+        }
       }
-      throw new InternalServerErrorException('Error al actualizar base de datos');
+
+      console.log(`✅ [updateService] Servicio actualizado exitosamente`);
+      return { success: true, message: 'Servicio actualizado correctamente' };
+    } catch (error: any) {
+      // Permitir que el BadRequestException pase intacto
+      if (error instanceof BadRequestException) {
+        console.log(`⚠️ [updateService] Validación de duplicados falló:`, error.message);
+        throw error;
+      }
+      
+      if (error.code === 11000) {
+        throw new ConflictException('Uno de los identificadores únicos ya está en uso.');
+      }
+      
+      console.error(`❌ [updateService] Error:`, error);
+      throw error;
     }
   }
 
@@ -156,6 +254,8 @@ export class ServiceService implements OnModuleInit {
   }
 
   async createService(serviceData: Partial<ServiceDto>): Promise<Service> {
+    await this.validateUniqueFields(undefined, serviceData.tipoServicio, serviceData);
+
     try {
       const newService = this.serviceRepository.create(serviceData as DeepPartial<Service>);
       return await this.serviceRepository.save(newService);
@@ -169,11 +269,9 @@ export class ServiceService implements OnModuleInit {
     }
   }
 
-  // ✅ FIX: Acepta req para capturar oldValue antes del toggle de status
   async removeService(id: string, req?: any): Promise<void> {
     const service = await this.findServiceById(new ObjectId(id));
 
-    // ✅ Capturar estado anterior para auditoría
     if (req) {
       const { _id: _, ...safeOldData } = service as any;
       (req as any).oldValue = safeOldData;

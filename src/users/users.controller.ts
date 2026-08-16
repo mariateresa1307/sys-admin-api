@@ -14,10 +14,31 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Get()
-  async findAll(@Query('isActive') isActive: boolean) {
-    return await this.usersService.findAll({ isActive });
+   @Get()
+  async findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('isActive') isActive?: string,
+    @Query('search') search?: string,
+  ) {
+
+    if (page !== undefined || limit !== undefined || search !== undefined) {
+      const filters: any = {};
+      if (isActive !== undefined) filters.isActive = isActive === 'true';
+      if (search) filters.search = search;
+
+      return this.usersService.findAllPaginated(
+        Number(page) || 1,
+        Number(limit) || 10,
+        filters,
+      );
+    }
+
+     return this.usersService.findAll({
+      isActive: isActive !== undefined ? isActive === 'true' : undefined,
+    } as any);
   }
+
 
   @Get('me')
   @UseGuards(JwtAuthGuard)

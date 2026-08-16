@@ -1,4 +1,5 @@
 import { IsNotEmpty, IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
+import { CreateDateColumn } from 'typeorm';
 
 export class TicketDto {
   @IsString()
@@ -73,4 +74,8 @@ export class TicketDto {
   @IsBoolean()
   @IsOptional()
   afectacion?: boolean;
+
+  @CreateDateColumn()
+  @IsOptional()
+  fechaAsignacionOpA?: Date;
 }

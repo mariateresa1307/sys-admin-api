@@ -1,13 +1,13 @@
 import { Controller, Post, Get, Body, Param, Query, Put, UseGuards, Delete, Req } from '@nestjs/common';
 import { ServiceService } from './service.service';
-import { ServiceResponseDto, ServiceDto } from './dto/service.dto';
+import {  ServiceDto } from './dto/service.dto';
 import { ObjectId } from 'mongodb';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('services')
 @UseGuards(JwtAuthGuard)
 export class ServiceController {
-  constructor(private readonly serviceService: ServiceService) {}
+  constructor(private readonly serviceService: ServiceService) { }
 
   @Get()
   async findAll(
@@ -17,12 +17,14 @@ export class ServiceController {
     @Query('tipoServicio') tipoServicio?: string,
     @Query('excludeTipo') excludeTipo?: string,
     @Query('status') status?: string,
-    @Query('tipoCliente') tipoCliente?: string, 
+    @Query('tipoCliente') tipoCliente?: string,
+    @Query('vlan') vlan?: number,
+    @Query('nodos') nodos?: string
   ) {
 
-     console.log(' [ServiceController] Parámetros recibidos:', { 
-    page, limit, search, tipoServicio, excludeTipo 
-  });
+    console.log(' [ServiceController] Parámetros recibidos:', {
+      page, limit, search, tipoServicio, excludeTipo, status, tipoCliente, vlan, nodos
+    });
     const result = await this.serviceService.findAllPaginated(
       Number(page),
       Number(limit),
@@ -31,19 +33,20 @@ export class ServiceController {
       excludeTipo,
       status,
       tipoCliente,
-      
+      vlan,
+      nodos,
     );
 
 
 
 
-      console.log('📤 [ServiceController] Resultado:', {
-    total: result.total,
-    dataLength: result.data.length,
-    page: result.page,
-    totalPages: result.totalPages
-  });
-  
+    console.log('📤 [ServiceController] Resultado:', {
+      total: result.total,
+      dataLength: result.data.length,
+      page: result.page,
+      totalPages: result.totalPages
+    });
+
     return {
       ...result,
       data: result.data.map((s: any) => ({
@@ -61,8 +64,8 @@ export class ServiceController {
         vlan: s.vlan ?? null,
         contrato: s.contrato ?? null,
         proveedorDelServicioCompartido: s.proveedorDelServicioCompartido,
-         proveedorUM: s.proveedorUM,
-      ultimaMilla: s.ultimaMilla,
+        proveedorUM: s.proveedorUM,
+        ultimaMilla: s.ultimaMilla,
         nodoA: s.nodoA,
         nodoB: s.nodoB,
         nodoOLT: s.nodoOLT,
@@ -75,17 +78,17 @@ export class ServiceController {
   }
 
   @Get('debug-status')
-async debugStatus() {
-  const all = await this.serviceService.findAll();
-  const statusValues = [...new Set(all.map((s: any) => ({ 
-    status: s.status, 
-    name: s.name 
-  })))];
-  return { 
-    total: all.length,
-    uniqueStatus: statusValues 
-  };
-}
+  async debugStatus() {
+    const all = await this.serviceService.findAll();
+    const statusValues = [...new Set(all.map((s: any) => ({
+      status: s.status,
+      name: s.name
+    })))];
+    return {
+      total: all.length,
+      uniqueStatus: statusValues
+    };
+  }
   @Post()
   async createService(@Body() body: ServiceDto) {
     return await this.serviceService.createService(body);
@@ -106,7 +109,7 @@ async debugStatus() {
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string , @Req() req: Request) {
+  async remove(@Param('id') id: string, @Req() req: Request) {
     console.log('️ [BACKEND] Eliminando usuario con ID:', id);
     return await this.serviceService.removeService(id, req);
   }
