@@ -8,37 +8,13 @@ services:
     container_name: backend-app
     ports:
       - "4000:4000"
-    environment:
-      - DB_HOST=mongodb
-      - DB_PORT=27017
-      - DB_USERNAME=admin
-      - DB_PASSWORD=admin
-      - DB_DATABASE=mydb 
-      - DB_SYNCHRONIZE=true
-      - DB_LOGGING=false
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-    depends_on:
-      mongodb:
-        condition: service_started 
     volumes:
       - .:/app
       - /app/node_modules
     networks:
       - backend-network
-
-  mongodb:
-    image: mongo:latest
-    container_name: mongodb
-    restart: always
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    networks:
-      - backend-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   frontend:
     build:
@@ -51,9 +27,6 @@ services:
       - /app-react/node_modules
     networks:
       - backend-network
-
-volumes:
-  mongo_data:
 
 networks:
   backend-network:
