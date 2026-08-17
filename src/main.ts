@@ -21,7 +21,8 @@ app.use(express.json({ limit: '10mb' }));
   );
 
   app.enableCors({
-    origin: 'http://localhost:3000', 
+    origin: ['http://localhost:3000', 'http://172.16.3.53:3000'],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
 

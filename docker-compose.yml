@@ -20,6 +20,9 @@ services:
     build:
       context: ../sistema-admin/
     container_name: frontend
+    environment:
+      # Este es la IP publica del servidor fisico, seguido del puerto del backend
+      NEXT_PUBLIC_API_URL: "http://172.16.3.53:4000" 
     ports:
       - "3000:3000"
     volumes:
