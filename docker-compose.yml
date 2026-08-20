@@ -22,9 +22,6 @@ services:
       NEXT_PUBLIC_API_URL: "http://172.16.3.53:4000" 
     ports:
       - "3000:3000"
-    volumes:
-      - .:/app-react
-      - /app-react/node_modules
     networks:
       - backend-network
 
