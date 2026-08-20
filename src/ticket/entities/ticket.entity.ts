@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
   ObjectId,
 } from 'typeorm';
-import { TICKET_STATUS } from '../../utils/constants/tickets'; 
+import { TICKET_STATUS } from '../../utils/constants/tickets';
 
 @Entity('tickets')
 export class Ticket {
@@ -82,7 +82,7 @@ export class Ticket {
   @Column({ nullable: true })
   horaFinAfectacion?: string;
 
-   @Column({ type: 'date', nullable: true })
+  @Column({ type: 'date', nullable: true })
   horaCierreFalla?: Date;
 
   @Column({ nullable: true })
@@ -129,6 +129,9 @@ export class Ticket {
 
   @Column({ nullable: true })
   tEscalado?: number;
+
+  @Column({ nullable: true })
+  escaladoPor?: string;
 
   @Column({ nullable: true })
   cCierreSoporte?: number;

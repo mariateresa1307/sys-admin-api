@@ -121,6 +121,11 @@ export class UpdateTicketDto {
   @IsOptional()
   tEscalado?: number;
 
+  @IsString()
+  @IsOptional()
+  escaladoPor?: string;
+
+
   @IsNumber()
   @IsOptional()
   cCierreSoporte?: number;
@@ -174,7 +179,7 @@ export class UpdateTicketDto {
   @IsOptional()
   afectacion?: boolean;
 
-   @CreateDateColumn()
-    @IsOptional()
-    fechaAsignacionOpA?: Date;
+  @CreateDateColumn()
+  @IsOptional()
+  fechaAsignacionOpA?: Date;
 }

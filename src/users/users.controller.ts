@@ -14,30 +14,45 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-   @Get()
-  async findAll(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('isActive') isActive?: string,
-    @Query('search') search?: string,
-  ) {
+@Get()
+async findAll(
+  @Query('page') page?: string,
+  @Query('limit') limit?: string,
+  @Query('isActive') isActive?: string,
+  @Query('search') search?: string,
+) {
+  console.log('📥 [UsersController] Parámetros recibidos:', {
+    page,
+    limit,
+    isActive,
+    search
+  });
 
-    if (page !== undefined || limit !== undefined || search !== undefined) {
-      const filters: any = {};
-      if (isActive !== undefined) filters.isActive = isActive === 'true';
-      if (search) filters.search = search;
+  if (page !== undefined || limit !== undefined || search !== undefined) {
+    const filters: any = {};
+    if (isActive !== undefined) filters.isActive = isActive === 'true';
+    if (search) filters.search = search;
 
-      return this.usersService.findAllPaginated(
-        Number(page) || 1,
-        Number(limit) || 10,
-        filters,
-      );
-    }
+    const result = await this.usersService.findAllPaginated(
+      Number(page) || 1,
+      Number(limit) || 10,
+      filters,
+    );
 
-     return this.usersService.findAll({
-      isActive: isActive !== undefined ? isActive === 'true' : undefined,
-    } as any);
+    console.log('📤 [UsersController] Resultado:', {
+      total: result.total,
+      dataLength: result.data.length,
+      page: result.page,
+      totalPages: result.totalPages
+    });
+
+    return result;
   }
+
+  return this.usersService.findAll({
+    isActive: isActive !== undefined ? isActive === 'true' : undefined,
+  } as any);
+}
 
 
   @Get('me')

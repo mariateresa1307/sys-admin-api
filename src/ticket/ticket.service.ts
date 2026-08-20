@@ -216,7 +216,6 @@ private buildSearchFilter(filters: {
     where.subject = { $regex: filters.subject.trim(), $options: 'i' };
   }
 
-  // ✅ FIX: Status case-insensitive + trim por valor
   if (filters.status?.trim()) {
     const statusArray = filters.status
       .split(',')
@@ -226,7 +225,6 @@ private buildSearchFilter(filters: {
     console.log('🔍 [buildSearchFilter] Status array procesado:', statusArray);
     
     if (statusArray.length > 1) {
-      // ✅ Cada status como regex case-insensitive
       where.status = {
         $in: statusArray.map(s => new RegExp(`^${s}$`, 'i')),
       };
@@ -369,16 +367,21 @@ private buildSearchFilter(filters: {
     const horaCierre = new Date();
     
     const formatDate = (dateVal: any) => {
-      if (!dateVal) return 'N/A';
-      try {
-        return new Date(dateVal).toLocaleString('es-VE', {
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit'
-        });
-      } catch {
-        return 'N/A';
-      }
-    };
+  if (!dateVal) return 'N/A';
+  try {
+    return new Date(dateVal).toLocaleString('es-VE', {
+      timeZone: 'America/Caracas',
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit',
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch {
+    return 'N/A';
+  }
+};
 
     const currentDescription = ticket.description || ticket.bitacora || '';
     

@@ -42,51 +42,60 @@ export class UsersService {
 
 
 
-  // paginación
-  async findAllPaginated(
-    page: number = 1,
-    limit: number = 10,
-    filters: { isActive?: boolean; search?: string } = {}
-  ) {
-    const take = limit > 0 ? limit : 10;
-    const skip = page > 1 ? (page - 1) * take : 0;
+async findAllPaginated(
+  page: number = 1,
+  limit: number = 10,
+  filters: { isActive?: boolean; search?: string } = {}
+) {
+  const take = limit > 0 ? limit : 10;
+  const skip = page > 1 ? (page - 1) * take : 0;
 
-    const where: any = {};
+  const where: any = {};
 
-    // Filtro por estado
-    if (filters.isActive !== undefined) {
-      where.isActive = filters.isActive;
-    }
-
-    // Filtro de búsqueda
-    if (filters.search?.trim()) {
-      const term = filters.search.trim();
-      where.$or = [
-        { username: { $regex: term, $options: 'i' } },
-        { email: { $regex: term, $options: 'i' } },
-        { primerNombre: { $regex: term, $options: 'i' } },
-        { primerApellido: { $regex: term, $options: 'i' } },
-      ];
-    }
-
-    const [data, total] = await Promise.all([
-      this.userRepository.find({
-        where,
-        order: { primerNombre: 'ASC' },
-        skip,
-        take,
-      }),
-      this.userRepository.count(where),
-    ]);
-
-    return {
-      data,
-      total,
-      page,
-      limit: take,
-      totalPages: Math.ceil(total / take),
-    };
+  // Filtro por estado
+  if (filters.isActive !== undefined) {
+    where.isActive = filters.isActive;
   }
+
+  // Filtro de búsqueda
+  if (filters.search?.trim()) {
+    const term = filters.search.trim();
+    where.$or = [
+      { username: { $regex: term, $options: 'i' } },
+      { email: { $regex: term, $options: 'i' } },
+      { primerNombre: { $regex: term, $options: 'i' } },
+      { primerApellido: { $regex: term, $options: 'i' } },
+    ];
+  }
+
+  console.log('🔍 [UsersService] Where:', JSON.stringify(where));
+  console.log('📊 [UsersService] Skip:', skip, 'Take:', take);
+
+  // ✅ Usar findAndCount que es más confiable con MongoDB
+  const [data, total] = await this.userRepository.findAndCount({
+    where,
+    order: { primerNombre: 'ASC' },
+    skip,
+    take,
+  } as any);
+
+  console.log('✅ [UsersService] Resultados:', {
+    total,
+    dataLength: data.length,
+    skip,
+    take
+  });
+
+  return {
+    data,
+    total,
+    page,
+    limit: take,
+    totalPages: Math.ceil(total / take),
+  };
+}
+
+
   async findUserByEmail(email: string): Promise<User | null> {
     return await this.userRepository.findOne({ where: { email } });
   }

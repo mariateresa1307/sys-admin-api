@@ -5,6 +5,7 @@ export class ServiceResponseDto {
   tipoServicio?: string;
   name?: string;
   city?: string;
+  estado?: string;
   tipo_cliente?: string;
   ipNetuno?: string;
   id_netuno?: string;
@@ -35,7 +36,9 @@ export class ServiceDto {
   @IsNotEmpty()
   city?: string;
 
-
+  @IsOptional()
+  @IsString()
+  estado?: string;
 
   @IsString()
   @IsOptional()

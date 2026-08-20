@@ -18,6 +18,9 @@ export class Service {
 
   @Column()
   name!: string;
+  
+  @Column({ nullable: true })
+  estado?: string;
 
   @Column()
   city!: string;

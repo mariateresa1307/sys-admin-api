@@ -110,7 +110,7 @@ export class ServiceController {
 
   @Delete(':id')
   async remove(@Param('id') id: string, @Req() req: Request) {
-    console.log('️ [BACKEND] Eliminando usuario con ID:', id);
+    console.log('️ [BACKEND] Eliminando service con ID:', id);
     return await this.serviceService.removeService(id, req);
   }
 }

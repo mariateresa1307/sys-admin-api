@@ -22,7 +22,7 @@ export class MiscellaneousService {
     limit: number = 10,
     filter: { valor?: string; categoria?: string; padreId?: string; activo?: string }
   ) {
-    const take = limit > 0 ? limit : 10;
+    const take = limit && limit > 0 ? Math.min(limit, 9999) : 9999;
     const skip = page > 1 ? (page - 1) * take : 0;
     const where: any = {};
 
