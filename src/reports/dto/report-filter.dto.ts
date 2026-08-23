@@ -15,9 +15,5 @@ export class ReportFilterDto {
 
   @IsOptional()
   @IsString()
-  fechaInicio?: string;
-
-  @IsOptional()
-  @IsString()
-  fechaFin?: string;
+  mes?: string;
 }
