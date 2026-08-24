@@ -19,17 +19,15 @@ export class ReportsService {
 
   async getPreview(filterDto: ReportFilterDto): Promise<ReportPreviewModel | undefined> {
     const { grupo, plataforma, cliente, mes } = filterDto;
-    
     const query: any = { status: TICKET_STATUS.CERRADO };
-    
-    // ✅ Filtro por Mes (YYYY-MM)
+
     if (mes) {
       const [year, month] = mes.split('-');
       const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
       const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
       query.createdAt = { $gte: startDate, $lte: endDate };
     }
-    
+
     if (plataforma && plataforma !== 'TODAS') {
       query.networkCategory = plataforma;
     }
@@ -38,25 +36,20 @@ export class ReportsService {
     }
 
     const tickets = await this.ticketRepository.find(query);
+    console.log('📊 [ReportsService] Total tickets encontrados:', tickets.length);
 
     switch (grupo) {
-      case 'A':
-        return this.GrupoA(tickets, filterDto);
-      case 'B':
-        return this.GrupoB(tickets);
-      case 'C':
-        return this.GrupoC(tickets);
-      case 'D':
-        return this.GrupoD(tickets);
-      default:
-        return this.GrupoA(tickets, filterDto);
+      case 'A': return this.GrupoA(tickets, filterDto);
+      case 'B': return this.GrupoB(tickets);
+      case 'C': return this.GrupoC(tickets);
+      case 'D': return this.GrupoD(tickets);
+      default: return this.GrupoA(tickets, filterDto);
     }
   }
 
   async GrupoA(tickets: any[], filterDto: ReportFilterDto): Promise<ReportPreviewModel> {
     const { plataforma, cliente, mes } = filterDto;
-    
-    // Reconstruimos el query base para los aggregates de MTTR
+
     const closedFilter: any = { status: TICKET_STATUS.CERRADO };
     if (mes) {
       const [year, month] = mes.split('-');
@@ -64,12 +57,8 @@ export class ReportsService {
       const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
       closedFilter.createdAt = { $gte: startDate, $lte: endDate };
     }
-    if (plataforma && plataforma !== 'TODAS') {
-      closedFilter.networkCategory = plataforma;
-    }
-    if (cliente && cliente !== 'TODOS') {
-      closedFilter.tipoCliente = cliente;
-    }
+    if (plataforma && plataforma !== 'TODAS') closedFilter.networkCategory = plataforma;
+    if (cliente && cliente !== 'TODOS') closedFilter.tipoCliente = cliente;
 
     const [categoriasRed, tiposCliente] = await Promise.all([
       this.miscellaneousRepository.find({ categoria: CATEGORIA.CATEGORIA_RED }),
@@ -82,91 +71,130 @@ export class ReportsService {
     const [
       incidentesPorPlataforma,
       incidentesPorServicio,
-      totalTicketsSinEscalar,
       totalTickets,
       mttrByCategory,
       mttrTipoCliente
     ] = await Promise.all([
       this.ticketRepository.count({ ...closedFilter, networkCategory: { $in: categoryIds } }),
       this.ticketRepository.count({ ...closedFilter, tipoCliente: { $in: tipoClienteIds } }),
-      this.ticketRepository.count({ ...closedFilter, escaladoA: null }),
       this.ticketRepository.count(closedFilter),
       this.aggregateAverageMttrByField('networkCategory', categoryIds, closedFilter),
       this.aggregateAverageMttrByField('tipoCliente', tipoClienteIds, closedFilter),
     ]);
 
-    // ✅ NUEVO: Conteo por tipo de incidencia sobre los tickets filtrados
+    const ticketsResueltosSoporte = tickets.filter(t => {
+      const escaladoA = (t.escaladoA || '').toString().trim().toUpperCase();
+      return escaladoA === 'NO' || escaladoA === '' || !t.escaladoA;
+    }).length;
+
+    const ticketsEscaladosUnidad = tickets.filter(t => {
+      const escaladoA = (t.escaladoA || '').toString().trim().toUpperCase();
+      return escaladoA === 'SI' || (escaladoA !== '' && escaladoA !== 'NO');
+    }).length;
+
     const incidentesPorTipo = this.countByTipoIncidencia(tickets);
 
-    const fallasResueltasEnSoporte =
-      totalTickets > 0
-        ? Math.round((totalTicketsSinEscalar / totalTickets) * 10000) / 100
-        : 0;
+    const fallasResueltasEnSoporte = totalTickets > 0
+      ? Math.round((ticketsResueltosSoporte / totalTickets) * 10000) / 100
+      : 0;
 
     const mttrPlataforma = this.mapMttrByMiscellaneous(categoriasRed, mttrByCategory);
     const mttrServicio = this.mapMttrByMiscellaneous(tiposCliente, mttrTipoCliente);
 
+    // MTTR Tiempo Medio Plataforma (formateado como Xh Ym)
+    const ticketsConMttrPlataforma = tickets.filter(t => t.mttrTotal && t.networkCategory);
+    const totalMttrPlataforma = ticketsConMttrPlataforma.reduce((sum, t) => sum + (t.mttrTotal || 0), 0);
+    const avgMttrPlataformaMinutos = ticketsConMttrPlataforma.length > 0
+      ? Math.round(totalMttrPlataforma / ticketsConMttrPlataforma.length)
+      : 0;
+    const horasPlataforma = Math.floor(avgMttrPlataformaMinutos / 60);
+    const minutosPlataforma = avgMttrPlataformaMinutos % 60;
+    const mttrPlataformaFormateado = `${horasPlataforma}h ${minutosPlataforma}m`;
+
+    // MTTR Tiempo Medio Servicio (formateado como Xh Ym)
+    const ticketsConMttrServicio = tickets.filter(t => t.mttrTotal && t.tipoCliente);
+    const totalMttrServicio = ticketsConMttrServicio.reduce((sum, t) => sum + (t.mttrTotal || 0), 0);
+    const avgMttrServicioMinutos = ticketsConMttrServicio.length > 0
+      ? Math.round(totalMttrServicio / ticketsConMttrServicio.length)
+      : 0;
+    const horasServicio = Math.floor(avgMttrServicioMinutos / 60);
+    const minutosServicio = avgMttrServicioMinutos % 60;
+    const mttrServicioFormateado = `${horasServicio}h ${minutosServicio}m`;
+
+    console.log('📊 [ReportsService] MTTR calculado:', {
+      ticketsConMttrPlataforma: ticketsConMttrPlataforma.length,
+      minutosPlataforma: avgMttrPlataformaMinutos,
+      formateadoPlataforma: mttrPlataformaFormateado,
+      ticketsConMttrServicio: ticketsConMttrServicio.length,
+      minutosServicio: avgMttrServicioMinutos,
+      formateadoServicio: mttrServicioFormateado,
+    });
+
+    // ✅ Resolver IDs de misceláneos a nombres legibles
+    const miscAll = await this.miscellaneousRepository.find();
+    const miscMap = new Map<string, string>();
+    miscAll.forEach(m => miscMap.set(m._id.toString(), m.valor));
+
+    // ✅ Construir detalle de tickets para el Excel (con nombres resueltos)
+    const ticketsDetalle = tickets.map(t => ({
+      caseNumber: t.caseNumber || '',
+      tipoIncidencia: Array.isArray(t.incidentType) ? t.incidentType[0] : (t.incidentType || t.tipoIncidencia || ''),
+      networkCategory: miscMap.get(String(t.networkCategory)) || t.networkCategory || '',
+      tipoCliente: miscMap.get(String(t.tipoCliente)) || t.tipoCliente || '',
+      horaInicioFalla: t.horaInicioFalla || '',
+      horaCierre: t.horaCierreFalla || t.horaCierre || '',
+      duracion: t.mttrTotal
+        ? `${Math.floor(t.mttrTotal / 60)}h ${t.mttrTotal % 60}m`
+        : 'N/A',
+      causaRaiz: miscMap.get(String(t.causaRaiz)) || t.causaRaiz || '',
+      solucionCaso: miscMap.get(String(t.SolucionCaso)) || t.SolucionCaso || '',
+      operador: t.operador || t.operatorAsignado || '',
+    }));
+
     return {
       cards: [
-        {
-          title: 'Incidentes por plataforma',
-          value: `${incidentesPorPlataforma}`,
-          color: '#4287f5',
-          subtitle: 'Categoria de red',
-        },
-        {
-          title: 'Incidentes por servicio',
-          value: `${incidentesPorServicio}`,
-          color: '#7542f5',
-          subtitle: 'Tipo cliente',
-        },
+        { title: 'Incidentes por plataforma', value: `${incidentesPorPlataforma}`, color: '#4287f5', subtitle: 'Categoria de red' },
+        { title: 'Incidentes por servicio', value: `${incidentesPorServicio}`, color: '#7542f5', subtitle: 'Tipo cliente' },
         {
           title: '% fallas resueltas en Soporte',
           value: `${fallasResueltasEnSoporte}%`,
           color: '#bf42f5',
-          subtitle: '',
+          subtitle: `Resueltas: ${ticketsResueltosSoporte} | Escaladas: ${ticketsEscaladosUnidad}`
         },
-        // ✅ NUEVAS CARDS
+        { title: 'Incidencias Puntuales', value: `${incidentesPorTipo.PUNTUAL}`, color: '#42f5a8', subtitle: 'Tipo: Puntual' },
+        { title: 'Incidencias Masivas', value: `${incidentesPorTipo.MASIVA}`, color: '#f54242', subtitle: 'Tipo: Masiva' },
+        { title: 'Ventana de Mantenimiento', value: `${incidentesPorTipo.MANTENIMIENTO}`, color: '#f5a842', subtitle: 'Tipo: Mantenimiento' },
+        { title: 'Total Tickets', value: `${totalTickets}`, color: '#f5a842', subtitle: 'Cerrados en el período' },
         {
-          title: 'Incidencias Puntuales',
-          value: `${incidentesPorTipo.PUNTUAL}`,
-          color: '#42f5a8',
-          subtitle: 'Tipo: Puntual',
-        },
-        {
-          title: 'Incidencias Masivas',
-          value: `${incidentesPorTipo.MASIVA}`,
-          color: '#f54242',
-          subtitle: 'Tipo: Masiva',
+          title: 'MTTR Tiempo Medio Plataforma',
+          value: mttrPlataformaFormateado,
+          color: '#0288d1',
+          subtitle: `Basado en ${ticketsConMttrPlataforma.length} tickets`
         },
         {
-          title: 'Ventana de Mantenimiento',
-          value: `${incidentesPorTipo.MANTENIMIENTO}`,
-          color: '#f5a842',
-          subtitle: 'Tipo: Mantenimiento',
+          title: 'MTTR Tiempo Medio Servicio',
+          value: mttrServicioFormateado,
+          color: '#7b1fa2',
+          subtitle: `Basado en ${ticketsConMttrServicio.length} tickets`
         },
       ],
       mttrPlataforma,
       mttrServicio,
+      totalTickets,
+      ticketsResueltosSoporte,
+      ticketsEscaladosUnidad,
     };
   }
 
-  // ============ GRUPO B — POR SERVICIO ============
   async GrupoB(tickets: any[]): Promise<ReportPreviewModel> {
     const cerrados = tickets.filter(t => t.status === TICKET_STATUS.CERRADO);
     const ahora = Date.now();
-    const ultimos30Dias = 30 * 24 * 60 * 60 * 1000;
-    
-    const ultimos30 = cerrados.filter(
-      t => ahora - new Date(t.closedAt || t.updatedAt).getTime() <= ultimos30Dias
-    );
+    const ultimos30 = cerrados.filter(t => ahora - new Date(t.closedAt || t.updatedAt).getTime() <= 30 * 24 * 60 * 60 * 1000);
 
     const tiempoPorServicio = this.aggregateAverageMttrByFieldFromTickets(cerrados, 'tipoCliente');
     const fallasRecurrentes = this.calcularFallasRecurrentes(ultimos30);
     const totalRecurrentes = fallasRecurrentes.reduce((sum, r) => sum + r.cantidad, 0);
-    const tasaRecurrentes = cerrados.length > 0 
-      ? Math.round((totalRecurrentes / cerrados.length) * 10000) / 100 
-      : 0;
+    const tasaRecurrentes = cerrados.length > 0 ? Math.round((totalRecurrentes / cerrados.length) * 10000) / 100 : 0;
 
     return {
       cards: [
@@ -179,10 +207,8 @@ export class ReportsService {
     };
   }
 
-  // ============ GRUPO C — OPERATIVOS 7x24 ============
   async GrupoC(tickets: any[]): Promise<ReportPreviewModel> {
     const cerrados = tickets.filter(t => t.status === TICKET_STATUS.CERRADO);
-
     const recibidosDia = tickets.filter(t => this.esTurnoDiurno(new Date(t.createdAt)));
     const recibidosNoche = tickets.filter(t => !this.esTurnoDiurno(new Date(t.createdAt)));
     const cerradosDia = cerrados.filter(t => this.esTurnoDiurno(new Date(t.closedAt || t.updatedAt)));
@@ -190,11 +216,9 @@ export class ReportsService {
 
     const tasaRotacionDiurna = recibidosDia.length > 0 ? Math.round((cerradosDia.length / recibidosDia.length) * 10000) / 100 : 0;
     const tasaRotacionNocturna = recibidosNoche.length > 0 ? Math.round((cerradosNoche.length / recibidosNoche.length) * 10000) / 100 : 0;
-
     const ticketsPorOperador = this.groupCount(cerrados, t => t.operador || t.operadorAsignado || 'SIN_OPERADOR');
     const operadoresUnicos = new Set(cerrados.map(t => t.operador || t.operadorAsignado).filter(Boolean)).size || 1;
     const promedioPorOperador = cerrados.length > 0 ? Math.round((cerrados.length / operadoresUnicos) * 100) / 100 : 0;
-
     const proactivas = tickets.filter(t => t.detectadaProactivamente === true || (t.origen || '').toUpperCase() === 'MONITOREO');
     const pctProactivas = tickets.length > 0 ? Math.round((proactivas.length / tickets.length) * 10000) / 100 : 0;
     const eficienciaCierre = tickets.length > 0 ? Math.round((cerrados.length / tickets.length) * 10000) / 100 : 0;
@@ -212,23 +236,21 @@ export class ReportsService {
     };
   }
 
-  // ============ GRUPO D — CALIDAD Y MEJORA ============
   async GrupoD(tickets: any[]): Promise<ReportPreviewModel> {
     const mayores = tickets.filter(t => (t.tipoIncidencia || '').toUpperCase() === 'MASIVA' || t.fallaPlataforma === true);
     const incidentesPorMes = this.groupByMonth(mayores);
-
     const escalados = tickets.filter(t => t.escaladoA && t.horaEscalamiento);
+
     const tiempoEscalamientoHoras = escalados.length > 0
       ? Math.round(escalados.reduce((sum, t) => {
-          const diff = new Date(t.horaEscalamiento).getTime() - new Date(t.createdAt).getTime();
-          return sum + Math.max(0, diff / 36e5);
-        }, 0) / escalados.length * 100) / 100
+        const diff = new Date(t.horaEscalamiento).getTime() - new Date(t.createdAt).getTime();
+        return sum + Math.max(0, diff / 36e5);
+      }, 0) / escalados.length * 100) / 100
       : 0;
 
     const criticas = tickets.filter(t => (t.tipoIncidencia || '').toUpperCase() === 'MASIVA' || t.fallaPlataforma === true);
     const documentadas = criticas.filter(t => (t.bitacora || '').trim().length > 0 || t.documentado === true);
     const pctDocumentados = criticas.length > 0 ? Math.round((documentadas.length / criticas.length) * 10000) / 100 : 0;
-
     const rankingServicios = this.groupCount(tickets, t => t.tipoCliente || 'SIN_SERVICIO');
 
     return {
@@ -243,15 +265,32 @@ export class ReportsService {
     };
   }
 
-  // ============ HELPERS ============
   private countByTipoIncidencia(tickets: any[]) {
     const counts = { PUNTUAL: 0, MASIVA: 0, MANTENIMIENTO: 0 };
+
+    const normalize = (t: any): string => {
+      const raw = t.incidentType || t.tipoIncidencia || '';
+      const value = Array.isArray(raw) ? raw[0] : raw;
+      return (value || '').toString().toUpperCase().trim();
+    };
+
+    if (tickets.length > 0) {
+      const tiposUnicos = [...new Set(tickets.map(t => normalize(t) || 'SIN_TIPO'))];
+      console.log('🔍 [ReportsService] Tipos de incidencia únicos en BD:', tiposUnicos);
+    }
+
     tickets.forEach(t => {
-      const tipo = (t.tipoIncidencia || '').toUpperCase();
-      if (tipo.includes('PUNTUAL')) counts.PUNTUAL++;
-      else if (tipo.includes('MASIVA')) counts.MASIVA++;
-      else if (tipo.includes('MANTENIMIENTO')) counts.MANTENIMIENTO++;
+      const tipo = normalize(t);
+      if (tipo.includes('MASIVA')) {
+        counts.MASIVA++;
+      } else if (tipo.includes('MANTENIMIENTO') || tipo.includes('VENTANA')) {
+        counts.MANTENIMIENTO++;
+      } else if (tipo.includes('PUNTUAL') || tipo.includes('FALLA')) {
+        counts.PUNTUAL++;
+      }
     });
+
+    console.log('📊 [ReportsService] Conteo final por tipo:', counts);
     return counts;
   }
 
@@ -312,35 +351,19 @@ export class ReportsService {
   private async aggregateAverageMttrByField(
     field: 'networkCategory' | 'tipoCliente',
     ids: string[],
-    matchQuery: any = {}, // ✅ NUEVO: para aplicar filtros de mes/plataforma
+    matchQuery: any = {},
   ): Promise<Map<string, number>> {
     if (ids.length === 0) return new Map();
-
     const results = await this.ticketRepository
       .aggregate<{ _id: string; averageMttr: number }>([
-        {
-          $match: {
-            ...matchQuery,
-            [field]: { $in: ids },
-            mttrTotal: { $exists: true, $ne: null },
-          },
-        },
-        {
-          $group: {
-            _id: `$${field}`,
-            averageMttr: { $avg: '$mttrTotal' },
-          },
-        },
+        { $match: { ...matchQuery, [field]: { $in: ids }, mttrTotal: { $exists: true, $ne: null } } },
+        { $group: { _id: `$${field}`, averageMttr: { $avg: '$mttrTotal' } } },
       ])
       .toArray();
-
     return new Map(results.map(({ _id, averageMttr }) => [_id, Math.round(averageMttr * 100) / 100]));
   }
 
   private mapMttrByMiscellaneous(items: Miscellaneous[], mttrById: Map<string, number>): { title: string; value: number }[] {
-    return items.map((item) => ({
-      title: item.valor,
-      value: mttrById.get(item._id.toString()) ?? 0,
-    }));
+    return items.map((item) => ({ title: item.valor, value: mttrById.get(item._id.toString()) ?? 0 }));
   }
 }
