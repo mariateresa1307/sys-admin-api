@@ -11,9 +11,13 @@ export interface ReportPreviewModel {
   mttrServicio?: { title: string; value: number }[];
   
 
-  fallasRecurrentes?: { servicio: string; causaRaiz: string; cantidad: number }[];
+  fallasRecurrentes?: {
+    servicio: string;
+    causaRaiz: string;
+    cantidad: number;
+  }[];
   tiempoPorServicio?: { title: string; value: number }[];
-  
+
 
   ticketsPorOperador?: { name: string; cantidad: number }[];
   promedioPorOperador?: number;
