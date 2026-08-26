@@ -35,7 +35,7 @@ export class ReportsService {
       query.tipoCliente = cliente;
     }
 
-    const tickets = await this.ticketRepository.find(query);
+    const tickets = await this.ticketRepository.find(query as any);
     console.log('📊 [ReportsService] Total tickets encontrados:', tickets.length);
 
     switch (grupo) {
@@ -75,9 +75,9 @@ export class ReportsService {
       mttrByCategory,
       mttrTipoCliente
     ] = await Promise.all([
-      this.ticketRepository.count({ ...closedFilter, networkCategory: { $in: categoryIds } }),
-      this.ticketRepository.count({ ...closedFilter, tipoCliente: { $in: tipoClienteIds } }),
-      this.ticketRepository.count(closedFilter),
+      this.ticketRepository.count({ ...closedFilter, networkCategory: { $in: categoryIds } } as any),
+      this.ticketRepository.count({ ...closedFilter, tipoCliente: { $in: tipoClienteIds } } as any),
+      this.ticketRepository.count(closedFilter as any),
       this.aggregateAverageMttrByField('networkCategory', categoryIds, closedFilter),
       this.aggregateAverageMttrByField('tipoCliente', tipoClienteIds, closedFilter),
     ]);
@@ -137,18 +137,21 @@ export class ReportsService {
 
     // ✅ Construir detalle de tickets para el Excel (con nombres resueltos)
     const ticketsDetalle = tickets.map(t => ({
-      caseNumber: t.caseNumber || '',
-      tipoIncidencia: Array.isArray(t.incidentType) ? t.incidentType[0] : (t.incidentType || t.tipoIncidencia || ''),
+      caseNumber: t.caseNumber || t.numeroTicket || '',
+      tipoIncidencia: Array.isArray((t as any).incidentType) ? (t as any).incidentType[0] : ((t as any).incidentType || t.tipoIncidencia || ''),
       networkCategory: miscMap.get(String(t.networkCategory)) || t.networkCategory || '',
       tipoCliente: miscMap.get(String(t.tipoCliente)) || t.tipoCliente || '',
-      horaInicioFalla: t.horaInicioFalla || '',
-      horaCierre: t.horaCierreFalla || t.horaCierre || '',
+      city: miscMap.get(String((t as any).city)) || (t as any).city || '',
+      estado: (t as any).estado || '',
+      horaInicioFalla: (t as any).horaInicioFalla || t.createdAt,
+      horaCierre: (t as any).horaCierreFalla || (t as any).horaCierre || (t as any).closedAt || t.updatedAt,
       duracion: t.mttrTotal
         ? `${Math.floor(t.mttrTotal / 60)}h ${t.mttrTotal % 60}m`
-        : 'N/A',
-      causaRaiz: miscMap.get(String(t.causaRaiz)) || t.causaRaiz || '',
-      solucionCaso: miscMap.get(String(t.SolucionCaso)) || t.SolucionCaso || '',
-      operador: t.operador || t.operatorAsignado || '',
+        : '0h 0m',
+      causaRaiz: miscMap.get(String((t as any).causaRaiz)) || (t as any).causaRaiz || '',
+      solucionCaso: miscMap.get(String((t as any).SolucionCaso)) || (t as any).SolucionCaso || '',
+      // Nota: Si 'operador' llega como ID, necesitarás inyectar UserRepository y hacer un map similar a miscMap
+      operador: t.operador || (t as any).operatorAsignado || 'N/A',
     }));
 
     return {
@@ -183,13 +186,53 @@ export class ReportsService {
       totalTickets,
       ticketsResueltosSoporte,
       ticketsEscaladosUnidad,
+      ticketsDetalle, // ✅ Incluido para la exportación frontend
     };
+  }
+
+  async getTicketsForExport(filterDto: ReportFilterDto): Promise<any[]> {
+    const { plataforma, cliente, mes } = filterDto;
+    
+    const query: any = { status: TICKET_STATUS.CERRADO };
+    
+    console.log('📊 [Export] Filtros recibidos:', filterDto);
+
+    if (mes) {
+      const [year, month] = mes.split('-');
+      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+      query.createdAt = { $gte: startDate, $lte: endDate };
+      console.log('📊 [Export] Rango de fechas aplicado:', { startDate: startDate.toISOString(), endDate: endDate.toISOString() });
+    }
+    
+    if (plataforma && plataforma !== 'TODAS') {
+      query.networkCategory = plataforma;
+    }
+    if (cliente && cliente !== 'TODOS') {
+      query.tipoCliente = cliente;
+      console.log('📊 [Export] Filtro cliente aplicado:', cliente);
+    }
+    
+    const tickets = await this.ticketRepository.find(query as any);
+
+    console.log('📊 [Export] Tickets encontrados en BD:', tickets.length);
+    if (tickets.length > 0) {
+      console.log('📊 [Export] Ejemplo de primer ticket:', {
+        id: tickets[0]._id,
+        numeroTicket: (tickets[0] as any).numeroTicket || (tickets[0] as any).caseNumber,
+        status: tickets[0].status,
+        createdAt: tickets[0].createdAt,
+        tipoIncidencia: (tickets[0] as any).tipoIncidencia || (tickets[0] as any).incidentType
+      });
+    }
+
+    return tickets;
   }
 
   async GrupoB(tickets: any[]): Promise<ReportPreviewModel> {
     const cerrados = tickets.filter(t => t.status === TICKET_STATUS.CERRADO);
     const ahora = Date.now();
-    const ultimos30 = cerrados.filter(t => ahora - new Date(t.closedAt || t.updatedAt).getTime() <= 30 * 24 * 60 * 60 * 1000);
+    const ultimos30 = cerrados.filter(t => ahora - new Date((t as any).closedAt || t.updatedAt).getTime() <= 30 * 24 * 60 * 60 * 1000);
 
     const tiempoPorServicio = this.aggregateAverageMttrByFieldFromTickets(cerrados, 'tipoCliente');
     const fallasRecurrentes = this.calcularFallasRecurrentes(ultimos30);
@@ -211,15 +254,15 @@ export class ReportsService {
     const cerrados = tickets.filter(t => t.status === TICKET_STATUS.CERRADO);
     const recibidosDia = tickets.filter(t => this.esTurnoDiurno(new Date(t.createdAt)));
     const recibidosNoche = tickets.filter(t => !this.esTurnoDiurno(new Date(t.createdAt)));
-    const cerradosDia = cerrados.filter(t => this.esTurnoDiurno(new Date(t.closedAt || t.updatedAt)));
-    const cerradosNoche = cerrados.filter(t => !this.esTurnoDiurno(new Date(t.closedAt || t.updatedAt)));
+    const cerradosDia = cerrados.filter(t => this.esTurnoDiurno(new Date((t as any).closedAt || t.updatedAt)));
+    const cerradosNoche = cerrados.filter(t => !this.esTurnoDiurno(new Date((t as any).closedAt || t.updatedAt)));
 
     const tasaRotacionDiurna = recibidosDia.length > 0 ? Math.round((cerradosDia.length / recibidosDia.length) * 10000) / 100 : 0;
     const tasaRotacionNocturna = recibidosNoche.length > 0 ? Math.round((cerradosNoche.length / recibidosNoche.length) * 10000) / 100 : 0;
-    const ticketsPorOperador = this.groupCount(cerrados, t => t.operador || t.operadorAsignado || 'SIN_OPERADOR');
-    const operadoresUnicos = new Set(cerrados.map(t => t.operador || t.operadorAsignado).filter(Boolean)).size || 1;
+    const ticketsPorOperador = this.groupCount(cerrados, t => t.operador || (t as any).operatorAsignado || 'SIN_OPERADOR');
+    const operadoresUnicos = new Set(cerrados.map(t => t.operador || (t as any).operatorAsignado).filter(Boolean)).size || 1;
     const promedioPorOperador = cerrados.length > 0 ? Math.round((cerrados.length / operadoresUnicos) * 100) / 100 : 0;
-    const proactivas = tickets.filter(t => t.detectadaProactivamente === true || (t.origen || '').toUpperCase() === 'MONITOREO');
+    const proactivas = tickets.filter(t => (t as any).detectadaProactivamente === true || ((t as any).origen || '').toUpperCase() === 'MONITOREO');
     const pctProactivas = tickets.length > 0 ? Math.round((proactivas.length / tickets.length) * 10000) / 100 : 0;
     const eficienciaCierre = tickets.length > 0 ? Math.round((cerrados.length / tickets.length) * 10000) / 100 : 0;
 
@@ -237,19 +280,19 @@ export class ReportsService {
   }
 
   async GrupoD(tickets: any[]): Promise<ReportPreviewModel> {
-    const mayores = tickets.filter(t => (t.tipoIncidencia || '').toUpperCase() === 'MASIVA' || t.fallaPlataforma === true);
+    const mayores = tickets.filter(t => (t.tipoIncidencia || '').toUpperCase() === 'MASIVA' || (t as any).fallaPlataforma === true);
     const incidentesPorMes = this.groupByMonth(mayores);
-    const escalados = tickets.filter(t => t.escaladoA && t.horaEscalamiento);
+    const escalados = tickets.filter(t => t.escaladoA && (t as any).horaEscalamiento);
 
     const tiempoEscalamientoHoras = escalados.length > 0
       ? Math.round(escalados.reduce((sum, t) => {
-        const diff = new Date(t.horaEscalamiento).getTime() - new Date(t.createdAt).getTime();
+        const diff = new Date((t as any).horaEscalamiento).getTime() - new Date(t.createdAt).getTime();
         return sum + Math.max(0, diff / 36e5);
       }, 0) / escalados.length * 100) / 100
       : 0;
 
-    const criticas = tickets.filter(t => (t.tipoIncidencia || '').toUpperCase() === 'MASIVA' || t.fallaPlataforma === true);
-    const documentadas = criticas.filter(t => (t.bitacora || '').trim().length > 0 || t.documentado === true);
+    const criticas = tickets.filter(t => (t.tipoIncidencia || '').toUpperCase() === 'MASIVA' || (t as any).fallaPlataforma === true);
+    const documentadas = criticas.filter(t => ((t as any).bitacora || '').trim().length > 0 || (t as any).documentado === true);
     const pctDocumentados = criticas.length > 0 ? Math.round((documentadas.length / criticas.length) * 10000) / 100 : 0;
     const rankingServicios = this.groupCount(tickets, t => t.tipoCliente || 'SIN_SERVICIO');
 
@@ -326,7 +369,7 @@ export class ReportsService {
     const combos = new Map<string, { servicio: string; causaRaiz: string; cantidad: number }>();
     tickets.forEach(t => {
       const servicio = t.tipoCliente || 'SIN_SERVICIO';
-      const causaRaiz = t.causaRaiz || 'SIN_CAUSA';
+      const causaRaiz = (t as any).causaRaiz || 'SIN_CAUSA';
       const key = `${servicio}||${causaRaiz}`;
       if (!combos.has(key)) combos.set(key, { servicio, causaRaiz, cantidad: 0 });
       combos.get(key)!.cantidad += 1;
