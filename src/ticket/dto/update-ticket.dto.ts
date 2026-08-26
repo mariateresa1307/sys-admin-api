@@ -111,7 +111,7 @@ export class UpdateTicketDto {
 
   @IsNumber()
   @IsOptional()
-  tDeteccion?: number;
+  tDeteccion?: number; // Tiempo en minutos
 
   @IsNumber()
   @IsOptional()
@@ -125,14 +125,13 @@ export class UpdateTicketDto {
   @IsOptional()
   escaladoPor?: string;
 
-
   @IsNumber()
   @IsOptional()
   cCierreSoporte?: number;
 
   @IsNumber()
   @IsOptional()
-  mttrTotal?: number;
+  mttrTotal?: number; // MTTR (Mean Time To Repair) del ticket: el tiempo total de resolución, expresado en minutos. = horaInicioFalla  - horaCierreFalla
 
   @IsString()
   @IsNotEmpty()

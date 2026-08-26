@@ -1,12 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { ReportFilterDto } from './dto/report-filter.dto';
-import { ReportPreviewModel } from './models/report-preview.model';
+import { ReporteModelGroupA, ReporteModelGroupB, ReporteModelGroupC, ReporteModelGroupD, ReportPreviewModel } from './models/report-preview.model';
 import { Ticket } from 'src/ticket/entities/ticket.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MongoRepository } from 'typeorm';
 import { Miscellaneous } from 'src/miscellaneous/entities/miscellaneous.entity';
 import { CATEGORIA } from 'src/utils/constants/miscelanious.constants';
 import { TICKET_STATUS } from 'src/utils/constants/tickets';
+import { TicketDto } from 'src/ticket/dto/create-ticket.dto';
+import { convertMinutes } from 'src/utils/minutesToHoursMinutes';
+import type { Filter } from 'typeorm/driver/mongodb/typings';
+import { ObjectId } from 'mongodb';
+
+type TicketConTipoCliente = Omit<Ticket, 'tipoCliente'> & {
+  tipoCliente: string | Miscellaneous;
+};
 
 @Injectable()
 export class ReportsService {
@@ -19,8 +27,13 @@ export class ReportsService {
 
   async getPreview(filterDto: ReportFilterDto): Promise<ReportPreviewModel | undefined> {
     const { grupo, plataforma, cliente, mes } = filterDto;
-    const query: any = { status: TICKET_STATUS.CERRADO };
 
+    const query: Filter<Ticket> = {
+      status: TICKET_STATUS.CERRADO,
+      afectacion: true,
+    };
+
+    // ✅ Filtro por Mes (YYYY-MM)
     if (mes) {
       const [year, month] = mes.split('-');
       const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
@@ -47,7 +60,10 @@ export class ReportsService {
     }
   }
 
-  async GrupoA(tickets: any[], filterDto: ReportFilterDto): Promise<ReportPreviewModel> {
+  async GrupoA(
+    tickets: any[],
+    filterDto: ReportFilterDto,
+  ): Promise<ReporteModelGroupA> {
     const { plataforma, cliente, mes } = filterDto;
 
     const closedFilter: any = { status: TICKET_STATUS.CERRADO };
@@ -186,8 +202,8 @@ export class ReportsService {
       totalTickets,
       ticketsResueltosSoporte,
       ticketsEscaladosUnidad,
-      ticketsDetalle, // ✅ Incluido para la exportación frontend
-    };
+      ticketsDetalle,
+    } as ReporteModelGroupA;
   }
 
   async getTicketsForExport(filterDto: ReportFilterDto): Promise<any[]> {
@@ -229,28 +245,64 @@ export class ReportsService {
     return tickets;
   }
 
-  async GrupoB(tickets: any[]): Promise<ReportPreviewModel> {
+   // ============ GRUPO B — POR SERVICIO ============
+  async GrupoB(tickets: Array<Ticket>): Promise<ReporteModelGroupB> {
+    const ticketLength = tickets.length;
     const cerrados = tickets.filter(t => t.status === TICKET_STATUS.CERRADO);
     const ahora = Date.now();
     const ultimos30 = cerrados.filter(t => ahora - new Date((t as any).closedAt || t.updatedAt).getTime() <= 30 * 24 * 60 * 60 * 1000);
 
-    const tiempoPorServicio = this.aggregateAverageMttrByFieldFromTickets(cerrados, 'tipoCliente');
-    const fallasRecurrentes = this.calcularFallasRecurrentes(ultimos30);
+    const tipoClienteIds = Array.from(new Set(tickets.map((ticket) => String(ticket.tipoCliente)))).map((id) => new ObjectId(id));
+
+    const tipoClientes = await this.miscellaneousRepository.find({
+      _id: { $in: tipoClienteIds },
+    });
+
+    const tiempoPorServicios = this.obtenerTiempoPromedioPorServicio(tickets);
+    const fallasRecurrentes = this.calcularFallasRecurrentes(tickets);
     const totalRecurrentes = fallasRecurrentes.reduce((sum, r) => sum + r.cantidad, 0);
-    const tasaRecurrentes = cerrados.length > 0 ? Math.round((totalRecurrentes / cerrados.length) * 10000) / 100 : 0;
+    const tasaRecurrentes = ticketLength > 0 ? Math.round((totalRecurrentes / ticketLength) * 10000) / 100 : 0;
+
+    let tiempoPoServiciosTotal = 0;
+    tiempoPorServicios.forEach((tiempoServicio) => {
+      tiempoPoServiciosTotal += tiempoServicio.value;
+    });
+
+    const hoursMinutes = convertMinutes(tiempoPoServiciosTotal / tiempoPorServicios.length);
+    let hoursMinutesString = hoursMinutes.hours > 0 ? `${hoursMinutes.hours} horas ` : '';
+    hoursMinutesString += `${hoursMinutes.minutes} minutos`;
 
     return {
       cards: [
-        { title: 'Tiempo promedio por servicio', value: `${tiempoPorServicio.length} servicios`, color: '#4287f5', subtitle: 'Promedio MTTR' },
-        { title: 'Fallas recurrentes', value: `${fallasRecurrentes.length}`, color: '#f54242', subtitle: 'Últimos 30 días' },
-        { title: 'Tasa de recurrencia', value: `${tasaRecurrentes}%`, color: '#f5a842', subtitle: 'Misma causa raíz' },
+        {
+          title: 'Tiempo promedio por servicio',
+          value: `${hoursMinutesString}`,
+          color: '#4287f5',
+          subtitle: 'Promedio MTTR',
+        },
+        {
+          title: 'Fallas recurrentes',
+          value: `${fallasRecurrentes.length}`,
+          color: '#f54242',
+          subtitle: 'Últimos 30 días',
+        },
+        {
+          title: 'Tasa de recurrencia',
+          value: `${tasaRecurrentes}%`,
+          color: '#f5a842',
+          subtitle: 'Misma causa raíz',
+        },
       ],
       fallasRecurrentes,
-      tiempoPorServicio,
+      tiempoPorServicio: tiempoPorServicios.map((tiempoPorServicio) => ({
+        ...tiempoPorServicio,
+        title: tipoClientes.find((tipoClient) => tipoClient._id.toString() === tiempoPorServicio.title)?.valor || '',
+      })),
+      incidentesRecurrentes: [],
     };
   }
 
-  async GrupoC(tickets: any[]): Promise<ReportPreviewModel> {
+  async GrupoC(tickets: any[]): Promise<ReporteModelGroupC> {
     const cerrados = tickets.filter(t => t.status === TICKET_STATUS.CERRADO);
     const recibidosDia = tickets.filter(t => this.esTurnoDiurno(new Date(t.createdAt)));
     const recibidosNoche = tickets.filter(t => !this.esTurnoDiurno(new Date(t.createdAt)));
@@ -279,8 +331,8 @@ export class ReportsService {
     };
   }
 
-  async GrupoD(tickets: any[]): Promise<ReportPreviewModel> {
-    const mayores = tickets.filter(t => (t.tipoIncidencia || '').toUpperCase() === 'MASIVA' || (t as any).fallaPlataforma === true);
+  async GrupoD(tickets: any[]): Promise<ReporteModelGroupD> {
+    const mayores = tickets.filter(t => (t.tipoIncidencia || '').toUpperCase() === 'MASIVA' || t.fallaPlataforma === true);
     const incidentesPorMes = this.groupByMonth(mayores);
     const escalados = tickets.filter(t => t.escaladoA && (t as any).horaEscalamiento);
 
@@ -377,18 +429,31 @@ export class ReportsService {
     return Array.from(combos.values()).filter(r => r.cantidad > 1).sort((a, b) => b.cantidad - a.cantidad);
   }
 
-  private aggregateAverageMttrByFieldFromTickets(tickets: any[], field: string): { title: string; value: number }[] {
+  /*
+   * Para calcular Tiempo promedio por servicio
+   * 1. Recorrer tickets y usar de horaInicioFalla y horaFinAfectacion 
+   * 2. Calcular promedia basado en el tiempo transcurrido desde el inicio al final  
+   * 3. Retornar el valor en minutos
+   */
+  private obtenerTiempoPromedioPorServicio(
+    tickets: Array<Ticket>,
+  ): { title: string; value: number }[] {
     const acc = new Map<string, { sum: number; n: number }>();
-    tickets.forEach(t => {
-      const key = t[field] || 'SIN_CLASIFICAR';
+    tickets.forEach((ticket) => {
+      const key = ticket.tipoCliente || 'SIN_CLASIFICAR';
       const cur = acc.get(key) || { sum: 0, n: 0 };
-      cur.sum += t.mttrTotal || 0;
+      cur.sum += ticket.mttrTotal || 0;
       cur.n += 1;
       acc.set(key, cur);
     });
-    return Array.from(acc.entries())
-      .map(([title, { sum, n }]) => ({ title, value: n ? Math.round((sum / n) * 100) / 100 : 0 }))
+    const promedioPorServicio = Array.from(acc.entries())
+      .map(([title, { sum, n }]) => ({
+        title,
+        value: n ? Math.round((sum / n) * 100) / 100 : 0,
+      }))
       .sort((a, b) => b.value - a.value);
+
+    return promedioPorServicio;
   }
 
   private async aggregateAverageMttrByField(

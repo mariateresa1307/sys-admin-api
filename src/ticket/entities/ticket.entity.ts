@@ -29,7 +29,7 @@ export class Ticket {
   description?: string;
 
   @Column({ default: TICKET_STATUS.EN_GESTION })
-  status: string = TICKET_STATUS.EN_GESTION;
+  status: string;
 
   @Column()
   subcategoria!: string;
@@ -122,7 +122,7 @@ export class Ticket {
   imputable?: string;
 
   @Column({ nullable: true })
-  tDeteccion?: number;
+  tDeteccion?: number; // Tiempo en minutos
 
   @Column({ nullable: true })
   tAtencion?: number;
@@ -137,7 +137,7 @@ export class Ticket {
   cCierreSoporte?: number;
 
   @Column({ nullable: true })
-  mttrTotal?: number;
+  mttrTotal?: number; // MTTR (Mean Time To Repair) del ticket: el tiempo total de resolución, expresado en minutos. = horaInicioFalla  - horaCierreFalla
 
   @CreateDateColumn()
   createdAt!: Date;
