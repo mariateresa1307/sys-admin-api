@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ReportFilterDto } from './dto/report-filter.dto';
-import { ReportPreviewModel } from './models/report-preview.model';
+import { ReporteModelGroupA, ReporteModelGroupB, ReporteModelGroupC, ReporteModelGroupD, ReportPreviewModel } from './models/report-preview.model';
 import { Ticket } from 'src/ticket/entities/ticket.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MongoRepository } from 'typeorm';
@@ -63,7 +63,7 @@ export class ReportsService {
   async GrupoA(
     tickets: any[],
     filterDto: ReportFilterDto,
-  ): Promise<ReportPreviewModel> {
+  ): Promise<ReporteModelGroupA> {
     const { plataforma, cliente, mes } = filterDto;
 
     const closedFilter: any = { status: TICKET_STATUS.CERRADO };
@@ -203,12 +203,10 @@ export class ReportsService {
   }
 
   // ============ GRUPO B — POR SERVICIO ============
-  async GrupoB(tickets: Array<Ticket>): Promise<ReportPreviewModel> {
+  async GrupoB(tickets: Array<Ticket>): Promise<ReporteModelGroupB> {
     const ticketLength = tickets.length;
 
-    const tipoClienteIds = Array.from(
-      new Set(tickets.map((ticket) => String(ticket.tipoCliente)))
-    ).map((id) => new ObjectId(id));
+    const tipoClienteIds = Array.from(new Set(tickets.map((ticket) => String(ticket.tipoCliente)))).map((id) => new ObjectId(id));
 
     const tipoClientes = await this.miscellaneousRepository.find({
       _id: { $in: tipoClienteIds },
@@ -216,27 +214,17 @@ export class ReportsService {
 
     const tiempoPorServicios = this.obtenerTiempoPromedioPorServicio(tickets);
     const fallasRecurrentes = this.calcularFallasRecurrentes(tickets);
-    const totalRecurrentes = fallasRecurrentes.reduce(
-      (sum, r) => sum + r.cantidad,
-      0,
-    );
-    const tasaRecurrentes =
-      ticketLength > 0
-        ? Math.round((totalRecurrentes / ticketLength) * 10000) / 100
-        : 0;
+    const totalRecurrentes = fallasRecurrentes.reduce((sum, r) => sum + r.cantidad, 0);
+    const tasaRecurrentes = ticketLength > 0 ? Math.round((totalRecurrentes / ticketLength) * 10000) / 100 : 0;
 
     let tiempoPoServiciosTotal = 0;
     tiempoPorServicios.forEach((tiempoServicio) => {
       tiempoPoServiciosTotal += tiempoServicio.value;
     });
 
-    const hoursMinutes = convertMinutes(
-      tiempoPoServiciosTotal / tiempoPorServicios.length,
-    );
+    const hoursMinutes = convertMinutes(tiempoPoServiciosTotal / tiempoPorServicios.length);
     let hoursMinutesString = hoursMinutes.hours > 0 ? `${hoursMinutes.hours} horas ` : '';
     hoursMinutesString += `${hoursMinutes.minutes} minutos`;
-
-
 
     return {
       cards: [
@@ -262,16 +250,13 @@ export class ReportsService {
       fallasRecurrentes,
       tiempoPorServicio: tiempoPorServicios.map((tiempoPorServicio) => ({
         ...tiempoPorServicio,
-        title:
-          tipoClientes.find(
-            (tipoClient) =>
-              tipoClient._id.toString() === tiempoPorServicio.title,
-          )?.valor || '',
+        title: tipoClientes.find((tipoClient) => tipoClient._id.toString() === tiempoPorServicio.title)?.valor || '',
       })),
+      incidentesRecurrentes: [],
     };
   }
 
-  async GrupoC(tickets: any[]): Promise<ReportPreviewModel> {
+  async GrupoC(tickets: any[]): Promise<ReporteModelGroupC> {
     const cerrados = tickets.filter(t => t.status === TICKET_STATUS.CERRADO);
     const recibidosDia = tickets.filter(t => this.esTurnoDiurno(new Date(t.createdAt)));
     const recibidosNoche = tickets.filter(t => !this.esTurnoDiurno(new Date(t.createdAt)));
@@ -300,7 +285,7 @@ export class ReportsService {
     };
   }
 
-  async GrupoD(tickets: any[]): Promise<ReportPreviewModel> {
+  async GrupoD(tickets: any[]): Promise<ReporteModelGroupD> {
     const mayores = tickets.filter(t => (t.tipoIncidencia || '').toUpperCase() === 'MASIVA' || t.fallaPlataforma === true);
     const incidentesPorMes = this.groupByMonth(mayores);
     const escalados = tickets.filter(t => t.escaladoA && t.horaEscalamiento);
