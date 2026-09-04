@@ -7,10 +7,10 @@ import { MongoRepository } from 'typeorm';
 import { Miscellaneous } from 'src/miscellaneous/entities/miscellaneous.entity';
 import { CATEGORIA } from 'src/utils/constants/miscelanious.constants';
 import { TICKET_STATUS } from 'src/utils/constants/tickets';
-import { TicketDto } from 'src/ticket/dto/create-ticket.dto';
 import { convertMinutes } from 'src/utils/minutesToHoursMinutes';
 import type { Filter } from 'typeorm/driver/mongodb/typings';
 import { ObjectId } from 'mongodb';
+import { User } from '../users/entities/user.entity';
 
 type TicketConTipoCliente = Omit<Ticket, 'tipoCliente'> & {
   tipoCliente: string | Miscellaneous;
@@ -23,6 +23,8 @@ export class ReportsService {
     private readonly ticketRepository: MongoRepository<Ticket>,
     @InjectRepository(Miscellaneous)
     private readonly miscellaneousRepository: MongoRepository<Miscellaneous>,
+    @InjectRepository(User)
+    private readonly userRepository: MongoRepository<User>,
   ) {}
 
   async getPreview(filterDto: ReportFilterDto): Promise<ReportPreviewModel | undefined> {
@@ -33,7 +35,6 @@ export class ReportsService {
       afectacion: true,
     };
 
-    // ✅ Filtro por Mes (YYYY-MM)
     if (mes) {
       const [year, month] = mes.split('-');
       const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
@@ -49,7 +50,7 @@ export class ReportsService {
     }
 
     const tickets = await this.ticketRepository.find(query as any);
-    console.log('📊 [ReportsService] Total tickets encontrados:', tickets.length);
+    console.log(' [ReportsService] Total tickets encontrados:', tickets.length);
 
     switch (grupo) {
       case 'A': return this.GrupoA(tickets, filterDto);
@@ -60,10 +61,7 @@ export class ReportsService {
     }
   }
 
-  async GrupoA(
-    tickets: any[],
-    filterDto: ReportFilterDto,
-  ): Promise<ReporteModelGroupA> {
+  async GrupoA(tickets: any[], filterDto: ReportFilterDto): Promise<ReporteModelGroupA> {
     const { plataforma, cliente, mes } = filterDto;
 
     const closedFilter: any = { status: TICKET_STATUS.CERRADO };
@@ -137,7 +135,7 @@ export class ReportsService {
     const minutosServicio = avgMttrServicioMinutos % 60;
     const mttrServicioFormateado = `${horasServicio}h ${minutosServicio}m`;
 
-    console.log('📊 [ReportsService] MTTR calculado:', {
+    console.log(' [ReportsService] MTTR calculado:', {
       ticketsConMttrPlataforma: ticketsConMttrPlataforma.length,
       minutosPlataforma: avgMttrPlataformaMinutos,
       formateadoPlataforma: mttrPlataformaFormateado,
@@ -151,24 +149,78 @@ export class ReportsService {
     const miscMap = new Map<string, string>();
     miscAll.forEach(m => miscMap.set(m._id.toString(), m.valor));
 
-    // ✅ Construir detalle de tickets para el Excel (con nombres resueltos)
-    const ticketsDetalle = tickets.map(t => ({
-      caseNumber: t.caseNumber || t.numeroTicket || '',
-      tipoIncidencia: Array.isArray((t as any).incidentType) ? (t as any).incidentType[0] : ((t as any).incidentType || t.tipoIncidencia || ''),
-      networkCategory: miscMap.get(String(t.networkCategory)) || t.networkCategory || '',
-      tipoCliente: miscMap.get(String(t.tipoCliente)) || t.tipoCliente || '',
-      city: miscMap.get(String((t as any).city)) || (t as any).city || '',
-      estado: (t as any).estado || '',
-      horaInicioFalla: (t as any).horaInicioFalla || t.createdAt,
-      horaCierre: (t as any).horaCierreFalla || (t as any).horaCierre || (t as any).closedAt || t.updatedAt,
-      duracion: t.mttrTotal
-        ? `${Math.floor(t.mttrTotal / 60)}h ${t.mttrTotal % 60}m`
-        : '0h 0m',
-      causaRaiz: miscMap.get(String((t as any).causaRaiz)) || (t as any).causaRaiz || '',
-      solucionCaso: miscMap.get(String((t as any).SolucionCaso)) || (t as any).SolucionCaso || '',
-      // Nota: Si 'operador' llega como ID, necesitarás inyectar UserRepository y hacer un map similar a miscMap
-      operador: t.operador || (t as any).operatorAsignado || 'N/A',
-    }));
+    // ✅ Resolver IDs de operadores a nombres completos
+    const operadores = await this.userRepository.find();
+    console.log('👥 [ReportsService] Total operadores encontrados:', operadores.length);
+    
+    const operadorMap = new Map<string, string>();
+    operadores.forEach(u => {
+      const userId = u._id?.toString();
+      if (!userId) return;
+
+      const nombreCompleto = [
+        (u as any).primerNombre, 
+        (u as any).segundoNombre, 
+        (u as any).primerApellido, 
+        (u as any).segundoApellido
+      ].filter(Boolean).join(' ').trim() || (u as any).nombre || (u as any).username || (u as any).email || 'Usuario Desconocido';
+      
+      operadorMap.set(userId, nombreCompleto);
+    });
+
+    // ✅ Función auxiliar segura para extraer el ID como string
+    const getIdString = (val: any): string => {
+      if (!val) return '';
+      if (typeof val === 'object' && val.toString) return val.toString().trim();
+      return String(val).trim();
+    };
+
+    // ✅ Construir detalle de tickets usando los campos CORRECTOS de la BD
+    const ticketsDetalle = tickets.map(t => {
+      // ✅ CAMPOS CORRECTOS: operatorResponsable y operatorAsignado (inglés)
+      const opRespId = getIdString((t as any).operatorResponsable || t.operador);
+      const opAsigId = getIdString((t as any).operatorAsignado);
+
+      console.log('🔍 [Debug] Ticket:', {
+        caseNumber: t.caseNumber,
+        operatorResponsableRaw: (t as any).operatorResponsable,
+        operatorAsignadoRaw: (t as any).operatorAsignado,
+        opRespId,
+        opAsigId,
+        encontradoResp: operadorMap.get(opRespId),
+        encontradoAsig: operadorMap.get(opAsigId)
+      });
+
+      return {
+        caseNumber: t.caseNumber || t.numeroTicket || '',
+        tipoIncidencia: Array.isArray((t as any).incidentType) ? (t as any).incidentType[0] : ((t as any).incidentType || t.tipoIncidencia || ''),
+        networkCategory: miscMap.get(String(t.networkCategory)) || t.networkCategory || '',
+        tipoCliente: miscMap.get(String(t.tipoCliente)) || t.tipoCliente || '',
+        city: miscMap.get(String((t as any).city)) || (t as any).city || '',
+        estado: (t as any).estado || '',
+        horaInicioFalla: (t as any).horaInicioFalla || t.createdAt,
+        horaCierre: (t as any).horaCierreFalla || (t as any).horaCierre || (t as any).closedAt || t.updatedAt,
+        duracion: t.mttrTotal
+          ? `${Math.floor(t.mttrTotal / 60)}h ${t.mttrTotal % 60}m`
+          : '0h 0m',
+        causaRaiz: miscMap.get(String((t as any).causaRaiz)) || (t as any).causaRaiz || '',
+        solucionCaso: miscMap.get(String((t as any).SolucionCaso)) || (t as any).SolucionCaso || '',
+        
+        // ✅ Usar los campos correctos
+        operadorResponsable: operadorMap.get(opRespId) || (opRespId ? `ID: ${opRespId}` : 'N/A'),
+        operadorAsignado: opAsigId ? (operadorMap.get(opAsigId) || `ID: ${opAsigId}`) : '',
+      };
+    });
+
+    // Log para verificar el primer ticket procesado
+    if (ticketsDetalle.length > 0) {
+      console.log(' [ReportsService] Ejemplo de ticket procesado:', {
+        operatorResponsableRaw: (tickets[0] as any)?.operatorResponsable,
+        operatorAsignadoRaw: (tickets[0] as any)?.operatorAsignado,
+        operadorResponsableResuelto: ticketsDetalle[0]?.operadorResponsable,
+        operadorAsignadoResuelto: ticketsDetalle[0]?.operadorAsignado,
+      });
+    }
 
     return {
       cards: [
@@ -206,6 +258,8 @@ export class ReportsService {
     } as ReporteModelGroupA;
   }
 
+  // ... (getTicketsForExport, GrupoB, GrupoC, GrupoD y todos los helpers se mantienen IGUAL) ...
+
   async getTicketsForExport(filterDto: ReportFilterDto): Promise<any[]> {
     const { plataforma, cliente, mes } = filterDto;
     
@@ -233,7 +287,7 @@ export class ReportsService {
 
     console.log('📊 [Export] Tickets encontrados en BD:', tickets.length);
     if (tickets.length > 0) {
-      console.log('📊 [Export] Ejemplo de primer ticket:', {
+      console.log(' [Export] Ejemplo de primer ticket:', {
         id: tickets[0]._id,
         numeroTicket: (tickets[0] as any).numeroTicket || (tickets[0] as any).caseNumber,
         status: tickets[0].status,
@@ -245,21 +299,59 @@ export class ReportsService {
     return tickets;
   }
 
-   // ============ GRUPO B — POR SERVICIO ============
-  async GrupoB(tickets: Array<Ticket>): Promise<ReporteModelGroupB> {
+// ============ GRUPO B — POR SERVICIO ============
+async GrupoB(tickets: Array<Ticket>): Promise<ReporteModelGroupB> {
+  try {
+    console.log('📊 [GrupoB] Iniciando procesamiento. Tickets totales:', tickets.length);
+    
     const ticketLength = tickets.length;
     const cerrados = tickets.filter(t => t.status === TICKET_STATUS.CERRADO);
     const ahora = Date.now();
-    const ultimos30 = cerrados.filter(t => ahora - new Date((t as any).closedAt || t.updatedAt).getTime() <= 30 * 24 * 60 * 60 * 1000);
-
-    const tipoClienteIds = Array.from(new Set(tickets.map((ticket) => String(ticket.tipoCliente)))).map((id) => new ObjectId(id));
-
-    const tipoClientes = await this.miscellaneousRepository.find({
-      _id: { $in: tipoClienteIds },
+    const ultimos30 = cerrados.filter(t => {
+      const fechaCierre = (t as any).closedAt || t.updatedAt;
+      return fechaCierre && (ahora - new Date(fechaCierre).getTime() <= 30 * 24 * 60 * 60 * 1000);
     });
 
+    // ✅ FILTRAR solo tipoCliente válidos (ObjectIds de 24 caracteres hex)
+    const tipoClienteIdsSet = new Set<string>();
+    tickets.forEach(ticket => {
+      const tc = String(ticket.tipoCliente);
+      if (tc && tc.length === 24 && /^[0-9a-fA-F]{24}$/.test(tc)) {
+        tipoClienteIdsSet.add(tc);
+      }
+    });
+
+    const tipoClienteIds = Array.from(tipoClienteIdsSet).map((id) => new ObjectId(id));
+    const tipoClientes = tipoClienteIds.length > 0 
+      ? await this.miscellaneousRepository.find({ _id: { $in: tipoClienteIds } })
+      : [];
+
+    // ✅ También necesitamos resolver las causas raíz
+    const causaRaizIdsSet = new Set<string>();
+    tickets.forEach(ticket => {
+      const cr = String((ticket as any).causaRaiz);
+      if (cr && cr.length === 24 && /^[0-9a-fA-F]{24}$/.test(cr)) {
+        causaRaizIdsSet.add(cr);
+      }
+    });
+
+    const causaRaizIds = Array.from(causaRaizIdsSet).map((id) => new ObjectId(id));
+    const causasRaiz = causaRaizIds.length > 0
+      ? await this.miscellaneousRepository.find({ _id: { $in: causaRaizIds } })
+      : [];
+
     const tiempoPorServicios = this.obtenerTiempoPromedioPorServicio(tickets);
-    const fallasRecurrentes = this.calcularFallasRecurrentes(tickets);
+    
+    // ✅ Calcular fallas recurrentes
+    const fallasRecurrentesRaw = this.calcularFallasRecurrentes(ultimos30);
+    
+    // ✅ Resolver IDs a nombres en fallas recurrentes
+    const fallasRecurrentes = fallasRecurrentesRaw.map(falla => ({
+      servicio: tipoClientes.find(tc => tc._id.toString() === falla.servicio)?.valor || falla.servicio,
+      causaRaiz: causasRaiz.find(cr => cr._id.toString() === falla.causaRaiz)?.valor || falla.causaRaiz,
+      cantidad: falla.cantidad,
+    }));
+
     const totalRecurrentes = fallasRecurrentes.reduce((sum, r) => sum + r.cantidad, 0);
     const tasaRecurrentes = ticketLength > 0 ? Math.round((totalRecurrentes / ticketLength) * 10000) / 100 : 0;
 
@@ -271,6 +363,32 @@ export class ReportsService {
     const hoursMinutes = convertMinutes(tiempoPoServiciosTotal / tiempoPorServicios.length);
     let hoursMinutesString = hoursMinutes.hours > 0 ? `${hoursMinutes.hours} horas ` : '';
     hoursMinutesString += `${hoursMinutes.minutes} minutos`;
+
+    // ✅ GENERAR TICKS DETALLE PARA EXPORTACIÓN
+    const ticketsDetalle = tickets.map(t => {
+      const ticket = t as any;
+      const tipoClienteNombre = tipoClientes.find(tc => tc._id.toString() === String(t.tipoCliente))?.valor || String(t.tipoCliente);
+      const causaRaizNombre = causasRaiz.find(cr => cr._id.toString() === String(ticket.causaRaiz))?.valor || String(ticket.causaRaiz);
+      
+      const horas = t.mttrTotal ? Math.floor(t.mttrTotal / 60) : 0;
+      const mins = t.mttrTotal ? Math.round(t.mttrTotal % 60) : 0;
+      const duracion = t.mttrTotal ? `${horas}h ${mins}m` : '0h 0m';
+
+      return {
+        caseNumber: t.caseNumber || ticket.numeroTicket || '',
+        tipoIncidencia: Array.isArray(ticket.incidentType) ? ticket.incidentType[0] : (ticket.incidentType || ticket.tipoIncidencia || ''),
+        networkCategory: t.networkCategory || '',
+        tipoCliente: tipoClienteNombre,
+        horaInicioFalla: ticket.horaInicioFalla || t.createdAt,
+        horaCierre: ticket.horaCierreFalla || ticket.closedAt || t.updatedAt,
+        duracion: duracion,
+        causaRaiz: causaRaizNombre,
+        solucionCaso: ticket.SolucionCaso || '',
+        operadorResponsable: ticket.operatorResponsable || t.operador || '',
+      };
+    });
+
+    console.log('📊 [GrupoB] Tickets detallados generados para exportación:', ticketsDetalle.length);
 
     return {
       cards: [
@@ -296,69 +414,361 @@ export class ReportsService {
       fallasRecurrentes,
       tiempoPorServicio: tiempoPorServicios.map((tiempoPorServicio) => ({
         ...tiempoPorServicio,
-        title: tipoClientes.find((tipoClient) => tipoClient._id.toString() === tiempoPorServicio.title)?.valor || '',
+        title: tipoClientes.find((tipoClient) => tipoClient._id.toString() === tiempoPorServicio.title)?.valor || tiempoPorServicio.title,
       })),
       incidentesRecurrentes: [],
+      totalTickets: ticketLength,
+      ticketsDetalle, // ✅ AHORA SÍ SE RETORNA
     };
+  } catch (error) {
+    console.error('❌ [GrupoB] ERROR CRÍTICO:', error);
+    throw error;
   }
+}
 
-  async GrupoC(tickets: any[]): Promise<ReporteModelGroupC> {
+// ============ GRUPO C — POR OPERADOR ============
+async GrupoC(tickets: any[]): Promise<ReporteModelGroupC> {
+  try {
+    console.log('📊 [GrupoC] Iniciando procesamiento. Tickets totales:', tickets.length);
+
     const cerrados = tickets.filter(t => t.status === TICKET_STATUS.CERRADO);
     const recibidosDia = tickets.filter(t => this.esTurnoDiurno(new Date(t.createdAt)));
     const recibidosNoche = tickets.filter(t => !this.esTurnoDiurno(new Date(t.createdAt)));
     const cerradosDia = cerrados.filter(t => this.esTurnoDiurno(new Date((t as any).closedAt || t.updatedAt)));
     const cerradosNoche = cerrados.filter(t => !this.esTurnoDiurno(new Date((t as any).closedAt || t.updatedAt)));
 
+    // 1. Tasas de rotación
     const tasaRotacionDiurna = recibidosDia.length > 0 ? Math.round((cerradosDia.length / recibidosDia.length) * 10000) / 100 : 0;
     const tasaRotacionNocturna = recibidosNoche.length > 0 ? Math.round((cerradosNoche.length / recibidosNoche.length) * 10000) / 100 : 0;
-    const ticketsPorOperador = this.groupCount(cerrados, t => t.operador || (t as any).operatorAsignado || 'SIN_OPERADOR');
-    const operadoresUnicos = new Set(cerrados.map(t => t.operador || (t as any).operatorAsignado).filter(Boolean)).size || 1;
-    const promedioPorOperador = cerrados.length > 0 ? Math.round((cerrados.length / operadoresUnicos) * 100) / 100 : 0;
-    const proactivas = tickets.filter(t => (t as any).detectadaProactivamente === true || ((t as any).origen || '').toUpperCase() === 'MONITOREO');
-    const pctProactivas = tickets.length > 0 ? Math.round((proactivas.length / tickets.length) * 10000) / 100 : 0;
-    const eficienciaCierre = tickets.length > 0 ? Math.round((cerrados.length / tickets.length) * 10000) / 100 : 0;
+
+    // 2. ✅ EFICIENCIA DE CIERRE CORREGIDA
+    const totalRecibidosTurno = recibidosDia.length + recibidosNoche.length;
+    const totalCerradosTurno = cerradosDia.length + cerradosNoche.length;
+    
+    const eficienciaCierre = totalRecibidosTurno > 0 
+      ? Math.round((totalCerradosTurno / totalRecibidosTurno) * 10000) / 100 
+      : 0;
+
+    console.log('📊 [GrupoC] Debug Eficiencia:', {
+      recibidosDia: recibidosDia.length,
+      recibidosNoche: recibidosNoche.length,
+      totalRecibidosTurno,
+      cerradosDia: cerradosDia.length,
+      cerradosNoche: cerradosNoche.length,
+      totalCerradosTurno,
+      eficienciaCalculada: eficienciaCierre + '%'
+    });
+
+    // 3. Identificación robusta de operadores
+    const operadorIdsSet = new Set<string>();
+    cerrados.forEach(t => {
+      const rawOp = (t as any).operatorResponsable || t.operador || (t as any).operatorAsignado;
+      if (rawOp) {
+        operadorIdsSet.add(String(rawOp).trim());
+      }
+    });
+
+    const validObjectIds = Array.from(operadorIdsSet)
+      .filter(id => /^[0-9a-fA-F]{24}$/.test(id))
+      .map(id => new ObjectId(id));
+
+    const operadoresDB = validObjectIds.length > 0
+      ? await this.userRepository.find({ _id: { $in: validObjectIds } })
+      : [];
+
+    const operadorMap = new Map<string, string>();
+    operadoresDB.forEach(u => {
+      const userId = u._id?.toString();
+      if (!userId) return;
+      const nombreCompleto = [
+        (u as any).primerNombre, 
+        (u as any).segundoNombre, 
+        (u as any).primerApellido, 
+        (u as any).segundoApellido
+      ].filter(Boolean).join(' ').trim() || (u as any).nombre || (u as any).username || (u as any).email || 'Usuario Desconocido';
+      
+      operadorMap.set(userId, nombreCompleto);
+    });
+
+    // 4. Contar tickets por operador
+    const ticketsPorOperadorMap = new Map<string, { name: string; cantidad: number }>();
+    
+    cerrados.forEach(t => {
+      const rawOp = (t as any).operatorResponsable || t.operador || (t as any).operatorAsignado;
+      if (!rawOp) return;
+
+      const opStr = String(rawOp).trim();
+      
+      let opName = operadorMap.get(opStr);
+      if (!opName) {
+        if (!/^[0-9a-fA-F]{24}$/.test(opStr) && opStr.length > 3) {
+          opName = opStr;
+        } else {
+          opName = `ID: ${opStr}`;
+        }
+      }
+
+      const current = ticketsPorOperadorMap.get(opName) || { name: opName, cantidad: 0 };
+      current.cantidad += 1;
+      ticketsPorOperadorMap.set(opName, current);
+    });
+
+    const ticketsPorOperador = Array.from(ticketsPorOperadorMap.values())
+      .sort((a, b) => b.cantidad - a.cantidad);
+
+    const operadoresUnicos = ticketsPorOperador.length || 1;
+    const promedioPorOperador = cerrados.length > 0 
+      ? Math.round((cerrados.length / operadoresUnicos) * 100) / 100 
+      : 0;
+
+    // ==========================================
+    // ✅ 5. GENERAR TICKETS DETALLE PARA EXPORTACIÓN
+    // ==========================================
+    const ticketsDetalle = cerrados.map(t => {
+      const rawOp = (t as any).operatorResponsable || t.operador || (t as any).operatorAsignado;
+      const opStr = String(rawOp || '').trim();
+      
+      const opName = operadorMap.get(opStr) || 
+        (opStr.length > 3 && !/^[0-9a-fA-F]{24}$/.test(opStr) ? opStr : `ID: ${opStr}`);
+      
+      const fechaCierre = new Date((t as any).closedAt || t.updatedAt);
+      const turno = this.esTurnoDiurno(fechaCierre) ? 'Diurno (7am-7pm)' : 'Nocturno (7pm-7am)';
+      
+      const horas = t.mttrTotal ? Math.floor(t.mttrTotal / 60) : 0;
+      const mins = t.mttrTotal ? Math.round(t.mttrTotal % 60) : 0;
+      const duracion = t.mttrTotal ? `${horas}h ${mins}m` : '0h 0m';
+
+      return {
+        caseNumber: t.caseNumber || (t as any).numeroTicket || '',
+        tipoIncidencia: Array.isArray((t as any).incidentType) ? (t as any).incidentType[0] : ((t as any).incidentType || ''),
+        networkCategory: t.networkCategory || '',
+        tipoCliente: t.tipoCliente || '',
+        horaInicioFalla: (t as any).horaInicioFalla || t.createdAt,
+        horaCierre: (t as any).horaCierreFalla || (t as any).closedAt || t.updatedAt,
+        duracion: duracion,
+        causaRaiz: (t as any).causaRaiz || '',
+        operadorResponsable: opName,
+        turno: turno,
+      };
+    });
+
+    console.log('📊 [GrupoC] Operadores únicos:', operadoresUnicos);
+    console.log('📊 [GrupoC] Top operador:', ticketsPorOperador[0]);
+    console.log('📊 [GrupoC] Tickets detalle generados para exportación:', ticketsDetalle.length);
 
     return {
       cards: [
         { title: 'Tasa rotación diurna', value: `${tasaRotacionDiurna}%`, color: '#42f5a8', subtitle: 'Turno 7am-7pm' },
         { title: 'Tasa rotación nocturna', value: `${tasaRotacionNocturna}%`, color: '#4287f5', subtitle: 'Turno 7pm-7am' },
-        { title: '% Detección proactiva', value: `${pctProactivas}%`, color: '#f542f5', subtitle: 'Por monitoreo' },
-        { title: 'Eficiencia de cierre', value: `${eficienciaCierre}%`, color: '#42f5d4', subtitle: 'Tickets cerrados/total' },
+        { title: 'Eficiencia de cierre', value: `${eficienciaCierre}%`, color: '#42f5d4', subtitle: 'Tickets cerrados/recibidos' },
       ],
       ticketsPorOperador,
       promedioPorOperador,
       cantidadOperadores: operadoresUnicos,
+      ticketsDetalle, // ✅ AGREGADO AL RETURN
     };
+  } catch (error) {
+    console.error('❌ [GrupoC] ERROR CRÍTICO:', error);
+    throw error;
   }
+}
 
-  async GrupoD(tickets: any[]): Promise<ReporteModelGroupD> {
-    const mayores = tickets.filter(t => (t.tipoIncidencia || '').toUpperCase() === 'MASIVA' || t.fallaPlataforma === true);
-    const incidentesPorMes = this.groupByMonth(mayores);
-    const escalados = tickets.filter(t => t.escaladoA && (t as any).horaEscalamiento);
 
-    const tiempoEscalamientoHoras = escalados.length > 0
-      ? Math.round(escalados.reduce((sum, t) => {
-        const diff = new Date((t as any).horaEscalamiento).getTime() - new Date(t.createdAt).getTime();
-        return sum + Math.max(0, diff / 36e5);
-      }, 0) / escalados.length * 100) / 100
+// ============ GRUPO D —  ============
+
+async GrupoD(tickets: any[]): Promise<ReporteModelGroupD> {
+  try {
+    console.log('📊 [GrupoD] === INICIO PROCESAMIENTO ===');
+    console.log('📊 [GrupoD] Tickets totales recibidos:', tickets.length);
+    
+    // 1. Resolver IDs de tipoCliente a nombres
+    const tipoClienteIdsSet = new Set<string>();
+    let sinServicioCount = 0;
+
+    tickets.forEach(t => {
+      const tc = String(t.tipoCliente || '').trim();
+      if (!tc || tc === 'SIN_SERVICIO' || !/^[0-9a-fA-F]{24}$/.test(tc)) {
+        sinServicioCount++;
+      } else {
+        tipoClienteIdsSet.add(tc);
+      }
+    });
+
+    console.log(`️ [GrupoD] Tickets SIN SERVICIO válido: ${sinServicioCount}`);
+
+    const tipoClienteIds = Array.from(tipoClienteIdsSet).map(id => new ObjectId(id));
+    const tipoClientes = tipoClienteIds.length > 0 
+      ? await this.miscellaneousRepository.find({ _id: { $in: tipoClienteIds } }) 
+      : [];
+
+    const tipoClienteMap = new Map<string, string>();
+    tipoClientes.forEach(tc => {
+      tipoClienteMap.set(tc._id.toString(), tc.valor);
+    });
+
+    // 2. INCIDENTES MAYORES (para el KPI y % documentados)
+    const incidentesMayores = tickets.filter(t => {
+      const rawTipo = t.incidentType || t.tipoIncidencia || '';
+      const tipoIncidencia = String(rawTipo).toUpperCase();
+      
+      const esMasiva = tipoIncidencia.includes('MASIVA');
+      const esFallaPlataforma = (t as any).fallaPlataforma === true || 
+                                 (t as any).granImpacto === true ||
+                                 tipoIncidencia.includes('PLATAFORMA');
+      
+      return esMasiva || esFallaPlataforma;
+    });
+
+    console.log('📊 [GrupoD] Incidentes mayores encontrados:', incidentesMayores.length);
+
+    // 3. ✅ GRÁFICA: TODOS los tickets categorizados por tipo
+    const incidentesPorMesMap = new Map<string, { 
+      total: number; 
+      masivas: number; 
+      banca: number; 
+      carrier: number;
+      corporativo: number;
+      otros: number;
+      tickets: string[] 
+    }>();
+
+    // ✅ Usar TODOS los tickets, no solo incidentesMayores
+    tickets.forEach(t => {
+      const d = new Date(t.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      
+      const rawTipo = t.incidentType || t.tipoIncidencia || '';
+      const tipoIncidencia = String(rawTipo).toUpperCase();
+      const tipoClienteId = String(t.tipoCliente || '');
+      const tipoClienteNombre = tipoClienteMap.get(tipoClienteId) || '';
+      
+      const esMasiva = tipoIncidencia.includes('MASIVA');
+      const esBanca = tipoClienteNombre.toUpperCase().includes('BANCA');
+      const esCarrier = tipoClienteNombre.toUpperCase().includes('CARRIER');
+      const esCorporativo = tipoClienteNombre.toUpperCase().includes('CORPORATIVO');
+      
+      if (!incidentesPorMesMap.has(key)) {
+        incidentesPorMesMap.set(key, { 
+          total: 0, 
+          masivas: 0, 
+          banca: 0, 
+          carrier: 0,
+          corporativo: 0,
+          otros: 0,
+          tickets: [] 
+        });
+      }
+      
+      const mesData = incidentesPorMesMap.get(key)!;
+      mesData.total += 1;
+      
+      // Categorizar cada ticket
+      if (esMasiva) {
+        mesData.masivas += 1;
+      } else if (esBanca) {
+        mesData.banca += 1;
+      } else if (esCarrier) {
+        mesData.carrier += 1;
+      } else if (esCorporativo) {
+        mesData.corporativo += 1;
+      } else {
+        mesData.otros += 1;
+      }
+      
+      mesData.tickets.push(t.caseNumber || t.numeroTicket || '');
+    });
+
+    const incidentesPorMes = Array.from(incidentesPorMesMap.entries())
+      .map(([mes, data]) => ({
+        mes,
+        cantidad: data.total,
+        masivas: data.masivas,
+        banca: data.banca,
+        carrier: data.carrier,
+        corporativo: data.corporativo,
+        otros: data.otros,
+        tickets: data.tickets.join(', ') || `${data.total} incidente(s)`
+      }))
+      .sort((a, b) => a.mes.localeCompare(b.mes));
+
+    console.log('📊 [GrupoD] Incidentes por mes (TODOS los tickets):', incidentesPorMes);
+
+    // 4. TIEMPO DE ESCALAMIENTO
+    const escalados = tickets.filter(t => {
+      const tieneEscaladoA = t.escaladoA && String(t.escaladoA).trim().length > 0;
+      const tieneHoraEscalamiento = (t as any).horaEscalamiento || (t as any).escaladoEnviadoA || (t as any).fechaAsignacionPA;
+      return tieneEscaladoA && tieneHoraEscalamiento;
+    });
+
+    let tiempoEscalamientoHoras = 0;
+    if (escalados.length > 0) {
+      const totalHoras = escalados.reduce((sum, t) => {
+        const horaInicio = new Date(t.createdAt).getTime();
+        const horaEscalamiento = new Date((t as any).horaEscalamiento || (t as any).escaladoEnviadoA || (t as any).fechaAsignacionPA).getTime();
+        return sum + Math.max(0, (horaEscalamiento - horaInicio) / 36e5);
+      }, 0);
+      tiempoEscalamientoHoras = Math.round((totalHoras / escalados.length) * 100) / 100;
+    }
+
+    console.log('📊 [GrupoD] Tickets escalados:', escalados.length, '| Promedio:', tiempoEscalamientoHoras + 'h');
+
+    // 5. % CAMBIOS DOCUMENTADOS (solo sobre incidentes mayores)
+    const fallasCriticas = incidentesMayores;
+    const fallasDocumentadas = fallasCriticas.filter(t => {
+      const tieneActualizacion = t.updatedAt && t.createdAt && new Date(t.updatedAt).getTime() !== new Date(t.createdAt).getTime();
+      const tieneBitacora = ((t as any).bitacora || '').trim().length > 0;
+      const tieneTT = ((t as any).ticketCambio || (t as any).ttCambio || '').toString().trim().length > 0;
+      const estaDocumentado = (t as any).documentado === true || (t as any).cambioDocumentado === true;
+      return tieneActualizacion || tieneBitacora || tieneTT || estaDocumentado;
+    });
+
+    const pctCambiosDocumentados = fallasCriticas.length > 0 
+      ? Math.round((fallasDocumentadas.length / fallasCriticas.length) * 10000) / 100 
       : 0;
 
-    const criticas = tickets.filter(t => (t.tipoIncidencia || '').toUpperCase() === 'MASIVA' || (t as any).fallaPlataforma === true);
-    const documentadas = criticas.filter(t => ((t as any).bitacora || '').trim().length > 0 || (t as any).documentado === true);
-    const pctDocumentados = criticas.length > 0 ? Math.round((documentadas.length / criticas.length) * 10000) / 100 : 0;
-    const rankingServicios = this.groupCount(tickets, t => t.tipoCliente || 'SIN_SERVICIO');
+    console.log('📊 [GrupoD] Fallas críticas:', fallasCriticas.length);
+    console.log(' [GrupoD] Fallas documentadas:', fallasDocumentadas.length);
+    console.log(' [GrupoD] % Documentados calculado:', pctCambiosDocumentados + '%');
+
+    // 6. CASO MÁS DEMANDANTE
+    const rankingServiciosConNombres = this.groupCount(tickets, t => {
+      const tipoClienteId = String(t.tipoCliente);
+      const nombreServicio = tipoClienteMap.get(tipoClienteId);
+      
+      if (!nombreServicio || !tipoClienteId || tipoClienteId.length < 3) {
+        return 'FALLAS MASIVAS';
+      }
+      
+      return nombreServicio;
+    });
+    
+    const casoMasDemandante = rankingServiciosConNombres.length > 0 ? rankingServiciosConNombres[0] : null;
+
+    // Formatear tiempo como "Xh Ym"
+    const horasEnteras = Math.floor(tiempoEscalamientoHoras);
+    const minutosRestantes = Math.round((tiempoEscalamientoHoras - horasEnteras) * 60);
+    const tiempoFormateado = `${horasEnteras}h ${minutosRestantes}m`;
 
     return {
       cards: [
-        { title: 'Incidentes mayores', value: `${mayores.length}`, color: '#f54242', subtitle: 'Masivos/Plataforma' },
-        { title: 'Tiempo escalamiento', value: `${tiempoEscalamientoHoras}h`, color: '#f5a842', subtitle: 'Promedio horas' },
-        { title: '% Documentados', value: `${pctDocumentados}%`, color: '#42f5a8', subtitle: 'Post-falla crítica' },
+        { title: 'Incidentes mayores', value: `${incidentesMayores.length}`, color: '#c62828', subtitle: 'Masivos/Plataforma' },
+        { title: 'Tiempo escalamiento', value: tiempoFormateado, color: '#f57c00', subtitle: 'Promedio horas' },
+        { title: '% cambios documentados', value: `${pctCambiosDocumentados}%`, color: '#388e3c', subtitle: 'Post-falla crítica' },
+        { title: 'Caso más demandante', value: casoMasDemandante ? `${casoMasDemandante.cantidad} tickets` : '0 tickets', color: '#1976d2', subtitle: casoMasDemandante?.name || 'Sin datos' },
       ],
       incidentesMayoresPorMes: incidentesPorMes,
       tiempoEscalamientoHoras,
-      rankingServicios,
+      rankingServicios: rankingServiciosConNombres,
+      casoMasDemandante,
+      totalFallasCriticas: fallasCriticas.length,
+      totalFallasDocumentadas: fallasDocumentadas.length,
     };
+  } catch (error) {
+    console.error('❌ [GrupoD] ERROR CRÍTICO:', error);
+    throw error;
   }
+}
+
 
   private countByTipoIncidencia(tickets: any[]) {
     const counts = { PUNTUAL: 0, MASIVA: 0, MANTENIMIENTO: 0 };
@@ -429,12 +839,6 @@ export class ReportsService {
     return Array.from(combos.values()).filter(r => r.cantidad > 1).sort((a, b) => b.cantidad - a.cantidad);
   }
 
-  /*
-   * Para calcular Tiempo promedio por servicio
-   * 1. Recorrer tickets y usar de horaInicioFalla y horaFinAfectacion 
-   * 2. Calcular promedia basado en el tiempo transcurrido desde el inicio al final  
-   * 3. Retornar el valor en minutos
-   */
   private obtenerTiempoPromedioPorServicio(
     tickets: Array<Ticket>,
   ): { title: string; value: number }[] {

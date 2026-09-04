@@ -7,11 +7,11 @@ import { Miscellaneous } from '../miscellaneous/entities/miscellaneous.entity';
 import { TicketModule } from '../ticket/ticket.module';
 import { Ticket } from '../ticket/entities/ticket.entity';
 import { Service } from 'src/service/entities/service.entity';
-
+import { User } from 'src/users/entities/user.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Miscellaneous, Ticket, Service]),
+    TypeOrmModule.forFeature([Miscellaneous, Ticket, Service, User]),
     TicketModule,
     MiscellaneousModule,
   ],
