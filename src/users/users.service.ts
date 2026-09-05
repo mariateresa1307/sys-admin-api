@@ -289,4 +289,31 @@ async findAllPaginated(
     return { message: 'Usuario eliminado permanentemente de la base de datos' };
   }
 
+    async changePassword(userId: string, currentPassword: string, newPassword: string,  req?: Request ): Promise<{ message: string }> {
+    const user = await this.getUserById(userId);
+
+    // 1. Validar que la contraseña actual sea correcta
+    const isCurrentValid = await this.validateUserPassword(currentPassword, user.clave);
+    if (!isCurrentValid) {
+      throw new BadRequestException('La contraseña actual es incorrecta');
+    }
+
+    // 2. Validar que la nueva contraseña sea diferente
+    const isSame = await bcrypt.compare(newPassword, user.clave);
+    if (isSame) {
+      throw new BadRequestException('La nueva contraseña debe ser diferente a la actual');
+    }
+
+    // 3. Validar longitud mínima
+    if (newPassword.length < 6) {
+      throw new BadRequestException('La nueva contraseña debe tener al menos 6 caracteres');
+    }
+
+    // 4. Hashear y guardar
+    user.clave = await bcrypt.hash(newPassword, 10);
+    await this.userRepository.save(user);
+
+    return { message: 'Contraseña actualizada correctamente' };
+  }
+
 }

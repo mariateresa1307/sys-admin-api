@@ -119,4 +119,22 @@ async create(@Body() createUserDto: CreateUserDto) {
     console.log('️ [BACKEND] Eliminando usuario con ID:', id);
     return await this.usersService.deleteUser(id);
   }
+
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @Req() req: any,
+    @Body() body: { currentPassword: string; newPassword: string }
+    
+  ) {
+    const userId = req.user._id || req.user.id;
+    
+    return this.usersService.changePassword(
+      userId,
+      body.currentPassword,
+      body.newPassword,
+      req
+    );
+  }
 }

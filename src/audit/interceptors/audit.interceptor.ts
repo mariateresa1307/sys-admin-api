@@ -28,12 +28,16 @@ export class AuditInterceptor implements NestInterceptor {
     const clientIp = getClientIp(request);
     const isLogout = handler === 'logout' || url.includes('/logout');
     const isLogin = handler === 'login' || url.includes('/login');
+    const isPasswordChange = handler === 'changePassword' || url.includes('/change-password'); // ✅ NUEVO
     const isUpdate = method === 'PUT' || method === 'PATCH';
     const isDelete = method === 'DELETE';
 
     let userEmail = user?.email;
     let userId = user?.sub || user?._id;
 
+if ((isLogin || isLogout || isPasswordChange) && !userEmail) {
+      userEmail = body?.email;
+    }
 if ((isLogin || isLogout) && !userEmail) {
       userEmail = body?.email;
     }
@@ -52,8 +56,6 @@ if ((isLogin || isLogout) && !userEmail) {
         console.warn('⚠️ [AuditInterceptor] Error extrayendo del token:', message);
       }
     }
-
-     const hasIdentity = Boolean(userEmail || userId);
      
     return next.handle().pipe(
       tap(async (response) => {
@@ -62,11 +64,12 @@ if ((isLogin || isLogout) && !userEmail) {
 
           if (isLogout) action = AuditAction.LOGOUT;
           else if (isLogin) action = AuditAction.LOGIN;
+          else if (isPasswordChange) action = AuditAction.CAMBIO_CONTRASEÑA;
           else if (method === 'POST') action = AuditAction.CREATE;
           else if (isUpdate) action = AuditAction.UPDATE;
           else if (method === 'DELETE') action = AuditAction.DELETE;
 
-          if (action && (user || isLogout || isLogin)) {
+          if (action && (user || isLogout || isLogin || isPasswordChange)) {
             const oldValue = (isUpdate || isDelete) ? (request as any).oldValue : undefined;
             console.log('🔍 [INTERCEPTOR] isDelete:', isDelete);
             console.log('🔍 [INTERCEPTOR] oldValue capturado:', oldValue);
@@ -78,8 +81,9 @@ if ((isLogin || isLogout) && !userEmail) {
              if (isLogout) {
               detailsMessage = `Logout de usuario ${userEmail || 'desconocido'}`;
             } else if (isLogin) {
-
               detailsMessage = `Login de usuario ${userEmail || 'desconocido'}`;
+            } else if (isPasswordChange) {
+              detailsMessage = `Cambio de contraseña para usuario ${userEmail || 'desconocido'}`;
             } else if (isUpdate && (module === 'TICKET' || module === 'TICKETS') && oldValue) {
               
               const caseNum = oldValue.caseNumber || 'S/N';
@@ -153,6 +157,16 @@ if ((isLogin || isLogout) && !userEmail) {
               details: `Intento de login fallido: ${attemptedEmail}`,
             } as any)
             .catch((e) => this.logger.error('Error logging failed login', e));
+        }else if (isPasswordChange) {
+          this.auditService.createLog({
+            userId: userId?.toString() || 'SYSTEM',
+            userEmail: userEmail || 'anonymous',
+            action: 'INTENTO_CAMBIO_CONTRASEÑA_FALLIDO',
+            moduleId: module,
+            ipAddress: clientIp,
+            userAgent: headers['user-agent'],
+            details: `Intento fallido de cambio de contraseña: ${error.message || 'Contraseña incorrecta'}`,
+          } as any).catch((e) => this.logger.error('Error logging failed password change', e));
         }
         return throwError(() => error);
       }),
