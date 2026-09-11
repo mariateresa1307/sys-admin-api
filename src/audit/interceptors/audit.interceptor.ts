@@ -21,7 +21,8 @@ export class AuditInterceptor implements NestInterceptor {
     const { method, body, params, user, headers, url } = request;
     const controller = context.getClass().name;
     const handler = context.getHandler().name;
-     if (controller === 'UserSessionsController') {
+
+      if (controller === 'UserSessionsController' || controller === 'NotificationsController' || url.startsWith('/notifications')) {
       return next.handle();
     }
     const module = this.extractModule(controller);
@@ -183,6 +184,7 @@ if ((isLogin || isLogout) && !userEmail) {
       ServicesController: AUDIT_MODULES.SERVICES,
       AuditController: AUDIT_MODULES.AUDIT,
       AuthController: AUDIT_MODULES.AUTH,
+      NotificationsController: AUDIT_MODULES.NOTIFICATIONS,
     };
     const module = mapping[controllerName] || controllerName.replace('Controller', '').toUpperCase();
     return module;

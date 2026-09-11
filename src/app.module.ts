@@ -20,10 +20,14 @@ import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
 import { JwtModule } from '@nestjs/jwt';
 import { UserSessionsModule } from './userSessions/userSessions.module';
 import { UserSession } from './userSessions/entity/userSession.entity'; // ✅ NUEVO: la ENTIDAD
+import { ScheduleModule } from '@nestjs/schedule';
+import { NotificationsModule } from './notifications/notifications.module';
+import { Notification } from './notifications/entities/notification.entity';
 
 @Module({
   imports: [
     JwtModule,
+    ScheduleModule.forRoot(), 
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -33,8 +37,7 @@ import { UserSession } from './userSessions/entity/userSession.entity'; // ✅ N
       useFactory: async (configService: ConfigService) => ({
         type: 'mongodb',
         url: configService.get<string>('MONGO_URI'),
-        // ✅ CORREGIDO: UserSession (entidad), NO UserSessionsModule
-        entities: [User, AuditLog, Service, Ticket, Miscellaneous, UserSession],
+        entities: [User, AuditLog, Service, Ticket, Miscellaneous, UserSession, Notification],
         synchronize: true,
       }),
       inject: [ConfigService],
@@ -46,7 +49,8 @@ import { UserSession } from './userSessions/entity/userSession.entity'; // ✅ N
     TicketModule,
     MiscellaneousModule,
     ReportsModule,
-    UserSessionsModule, // ✅ El módulo va solo aquí (en imports)
+    UserSessionsModule, 
+     NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

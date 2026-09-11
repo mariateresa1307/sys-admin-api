@@ -9,11 +9,15 @@ import { LoginResponseDto } from './dto/login-response.dto';
 import { UsersService } from '../users/users.service';
 import { ObjectId } from 'mongodb';
 import { AUDIT_MODULES } from '../utils/constants/audit-modules';
+import { NotificationsService } from '../notifications/notifications.service';
+import { TicketService } from '../ticket/ticket.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
+    private readonly ticketService: TicketService, 
+    private readonly notificationsService: NotificationsService,
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: MongoRepository<AuditLog>,
     private readonly jwtService: JwtService,
@@ -81,6 +85,23 @@ export class AuthService {
       moduleId: AUDIT_MODULES.AUTH,
       
     });
+    try {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const criticalTickets = await this.ticketService.findDelayedTickets(oneHourAgo);
+
+      if (criticalTickets && criticalTickets.length > 0) {
+        await this.notificationsService.createNotification({
+          userId: user._id.toString(),
+          title: `⚠️ Atención: ${criticalTickets.length} ticket(s) requieren revisión`,
+          message: `Al iniciar sesión, detectamos ${criticalTickets.length} ticket(s) sin actualizar por más de 1 hora.`,
+          type: 'login_alert',
+          ticketNumber: criticalTickets[0].caseNumber || 'N/A',
+        });
+      }
+    } catch (error) {
+      console.error('Error verificando tickets al login:', error);
+      // No lanzamos el error para no interrumpir el flujo de login
+    }
 
     return {
       access_token,
@@ -112,7 +133,7 @@ export class AuthService {
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
       details: params.details,
-      moduleId:params.details,
+      moduleId: params.moduleId,
       
     });
 

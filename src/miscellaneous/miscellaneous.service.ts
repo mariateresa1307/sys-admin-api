@@ -107,10 +107,6 @@ export class MiscellaneousService {
       valor: createDto.valor.toUpperCase(),
     };
 
-    if (createDto.categoria === 'TIPO_CLIENTE' && createDto.nivelSeveridad) {
-      whereQuery.nivelSeveridad = createDto.nivelSeveridad;
-    }
-
     if (padreId) {
       whereQuery.padreId = new ObjectId(padreId);
     }
@@ -148,13 +144,27 @@ export class MiscellaneousService {
       ? (Array.isArray(createDto.tipoIncidencia) ? createDto.tipoIncidencia : [createDto.tipoIncidencia])
       : [];
 
+    const causasRaizIdsArray = Array.isArray(createDto.causasRaizIds)
+      ? createDto.causasRaizIds.filter(Boolean)
+      : createDto.causasRaizIds
+        ? [createDto.causasRaizIds].filter(Boolean)
+        : [];
+
+    const categoriaRedIdsArray = Array.isArray(createDto.categoriaRedIds)
+      ? createDto.categoriaRedIds.filter(Boolean)
+      : createDto.categoriaRedIds
+        ? [createDto.categoriaRedIds].filter(Boolean)
+        : [];
+
     // ✅ CREAR EL ITEM INCLUYENDO padreId y padreNombre
     const newItem = this.miscellaneousRepository.create({
       ...createDto,
       padreId: padreId ? new ObjectId(padreId) : undefined,
-      padreNombre: padreNombre, // <--- ¡ESTA LÍNEA ES LA CLAVE!
+      padreNombre: padreNombre,
       valor: createDto.valor.toUpperCase(),
       tipoIncidencia: tipoIncidenciaArray,
+      causasRaizIds: causasRaizIdsArray,
+      categoriaRedIds: categoriaRedIdsArray,
     });
 
     console.log('✅ [SERVICE] Ciudad creada con éxito. padreId:', padreId, 'padreNombre:', padreNombre);
@@ -222,6 +232,19 @@ export class MiscellaneousService {
 
     let nuevoPadreId: string | undefined;
     let padreCambio = false;
+       let causasRaizIds = item.causasRaizIds || [];
+    if (updateDto.causasRaizIds !== undefined) {
+      causasRaizIds = Array.isArray(updateDto.causasRaizIds)
+        ? updateDto.causasRaizIds.filter(Boolean)
+        : [];
+    }
+
+    let categoriaRedIds = item.categoriaRedIds || [];
+    if (updateDto.categoriaRedIds !== undefined) {
+      categoriaRedIds = Array.isArray(updateDto.categoriaRedIds)
+        ? updateDto.categoriaRedIds.filter(Boolean)
+        : [];
+    }
 
     let nivelSeveridadCambio = false;
     if (categoriaActual === 'TIPO_CLIENTE') {
@@ -303,10 +326,20 @@ export class MiscellaneousService {
         : [updateDto.tipoIncidencia].filter(Boolean);
     }
 
+
+    let categoriaRedIdsArray: string[] = item.categoriaRedIds || [];
+    if (updateDto.categoriaRedIds !== undefined) {
+      categoriaRedIdsArray = Array.isArray(updateDto.categoriaRedIds)
+        ? updateDto.categoriaRedIds.filter((id): id is string => Boolean(id))
+        : [];
+    }
+    
     const updatedData: any = {
       ...updateDto,
       valor: nuevoValor,
       tipoIncidencia: tipoIncidenciaArray,
+       causasRaizIds: causasRaizIds,
+      categoriaRedIds: categoriaRedIds,
     };
 
     if (nuevoPadreId && nuevoPadreId !== item.padreId?.toString()) {

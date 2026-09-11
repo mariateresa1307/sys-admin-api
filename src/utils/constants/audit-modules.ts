@@ -8,6 +8,7 @@ export const AUDIT_MODULES = {
     MISCELLANEOUS: 'MISCELLANEOUS',
     AUDIT: 'AUDIT',
     REPORTES: 'REPORTES',
+    NOTIFICATIONS: 'NOTIFICATIONS',
 } as const;
 
 export type AuditModule = (typeof AUDIT_MODULES)[keyof typeof AUDIT_MODULES];

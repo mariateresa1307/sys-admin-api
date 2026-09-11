@@ -1,11 +1,4 @@
-import {
-  Entity,
-  ObjectIdColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  ObjectId,
-} from 'typeorm';
+import { Entity, ObjectIdColumn, Column, CreateDateColumn, UpdateDateColumn, ObjectId } from 'typeorm';
 
 @Entity('miscellaneous')
 export class Miscellaneous {
@@ -46,6 +39,12 @@ export class Miscellaneous {
 
   @Column({ nullable: true })
   tipoIncidencia?: string[];
+
+  @Column({ type: 'simple-array', nullable: true })
+  causasRaizIds?: string[];
+
+  @Column({ type: 'simple-array', nullable: true })
+  categoriaRedIds?: string[];
 
   @Column({ nullable: true })
   nivelSeveridad?: string;

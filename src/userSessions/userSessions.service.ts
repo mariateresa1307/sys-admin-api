@@ -61,4 +61,21 @@ export class UserSessionsService {
 
     return users.filter((u) => u !== null);
   }
+
+async getActiveUserIds(): Promise<string[]> {
+    // Considerar activos a quienes tuvieron actividad en los últimos 10 minutos
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    
+    const sessions = await this.sessionRepository.find({
+      where: { 
+        lastHeartbeat: { $gte: tenMinutesAgo },
+        isActive: true 
+      } as any,
+    });
+
+    const uniqueIds = new Set(sessions.map(s => s.userId));
+    return Array.from(uniqueIds);
+  }
+  
+
 }

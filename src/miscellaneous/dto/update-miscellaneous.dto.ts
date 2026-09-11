@@ -18,6 +18,16 @@ export class UpdateMiscellaneousDto {
   @IsString({ each: true })
   tipoIncidencia?: string[];
 
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  causasRaizIds?: string[];
+
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  categoriaRedIds?: string[];
+
   @IsString() @IsOptional() categoriaId?: string;
   @IsString() @IsOptional() subcategoriaId?: string;
   @IsString() @IsOptional() estadoId?: string;

@@ -1,8 +1,11 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MongoRepository } from 'typeorm';
@@ -18,13 +21,19 @@ import { AuditLog } from '../auth/entities/audit-log.entity';
 import { Miscellaneous } from '../miscellaneous/entities/miscellaneous.entity';
 import { Service } from '../service/entities/service.entity';
 import { getClientIp } from '../utils/constants/get-client-ip';
-
+import { UserSessionsService } from '../userSessions/userSessions.service'; 
+import { NotificationsService } from '../notifications/notifications.service';
 @Injectable()
 export class TicketService {
+  private readonly logger = new Logger(TicketService.name);
+
   constructor(
     @InjectRepository(Ticket)
     private readonly ticketRepository: MongoRepository<Ticket>,
     private readonly usersService: UsersService,
+    private readonly userSessionsService: UserSessionsService, 
+     @Inject(forwardRef(() => NotificationsService))
+    private readonly notificationsService: NotificationsService,
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: MongoRepository<AuditLog>,
     @InjectRepository(Miscellaneous)
@@ -305,53 +314,96 @@ private buildSearchFilter(filters: {
     };
   }
 
-  async updateTicket(
-    id: string,
-    updateTicketDto: UpdateTicketDto,
-    req?: Request, 
-  ): Promise<Ticket> {
-    const updateData = Object.fromEntries(
-      Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
-    );
+async updateTicket(
+  id: string,
+  updateTicketDto: UpdateTicketDto,
+  req?: Request, 
+): Promise<Ticket> {
+  let objectId: ObjectId;
+  try {
+    objectId = new ObjectId(id);
+  } catch {
+    throw new BadRequestException('ID inválido');
+  }
 
-    let objectId: ObjectId;
-    try {
-      objectId = new ObjectId(id);
-    } catch {
-      throw new BadRequestException('ID inválido');
+  // ✅ OBTENER EL TICKET ANTES DE VALIDAR PARA CONOCER SU ESTADO ACTUAL EN BD
+  const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
+
+  // ✅ VALIDACIÓN INTELIGENTE: Solo exigir campos de cierre si REALMENTE se está cerrando AHORA
+  // Es decir: el nuevo estado es CERRADO Y el estado anterior NO era CERRADO
+  const isClosingNow = 
+    (updateTicketDto.status === 'CERRADO' || updateTicketDto.status === 'cerrado') &&
+    (oldTicket?.status !== 'CERRADO' && oldTicket?.status !== 'cerrado');
+
+  if (isClosingNow) {
+    if (!updateTicketDto.escaladoPor || updateTicketDto.escaladoPor.trim() === '' || 
+        !updateTicketDto.imputable || updateTicketDto.imputable.trim() === '') {
+      throw new BadRequestException('No se puede cerrar el ticket: Los campos "Escalado por" e "Imputable a" son obligatorios.');
     }
+  }
 
-    const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
-    
-    if (oldTicket && req) {
-      (req as any).oldValue = await this.enrichTicketForAudit(oldTicket);
-    }
+  const updateData = Object.fromEntries(
+    Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
+  );
 
-    if (updateTicketDto.operatorAsignado && 
-      updateTicketDto.operatorAsignado !== oldTicket?.operatorAsignado) {
+  if (updateTicketDto.operatorAsignado && updateTicketDto.operatorAsignado !== oldTicket?.operatorAsignado) {
     updateData.fechaAsignacionOpA = new Date().toISOString();
   }
-    updateData.updatedAt = new Date();
+  updateData.updatedAt = new Date();
 
-    const result = await this.ticketRepository.updateOne(
-      { _id: objectId },
-      { $set: updateData },
-    );
+  const result = await this.ticketRepository.updateOne(
+    { _id: objectId },
+    { $set: updateData },
+  );
 
-    if (result.matchedCount === 0) {
-      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
-    }
-
-    const updatedTicket = await this.findTicketById(id);
-
-    if (req) {
-      (req as any).newValue = await this.enrichTicketForAudit(updatedTicket);
-    }
-
-    return updatedTicket;
+  if (result.matchedCount === 0) {
+    throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
   }
 
-  async closeTicket(id: string, req?: Request): Promise<Ticket> {
+  const updatedTicket = await this.findTicketById(id);
+
+  // ✅ CREAR AUDITORÍA DIRECTAMENTE
+  if (updateTicketDto.operatorAsignado || updateTicketDto.operatorResponsable) {
+    const changes = [];
+    const oldValue: any = {};
+    const newValue: any = {};
+
+    if (updateTicketDto.operatorAsignado && updateTicketDto.operatorAsignado !== oldTicket?.operatorAsignado) {
+      changes.push(`Operador asignado cambiado de '${oldTicket?.operatorAsignado || 'N/A'}' a '${updateTicketDto.operatorAsignado}'`);
+      oldValue.operatorAsignado = oldTicket?.operatorAsignado || 'N/A';
+      newValue.operatorAsignado = updateTicketDto.operatorAsignado;
+    }
+
+    if (updateTicketDto.operatorResponsable && updateTicketDto.operatorResponsable !== oldTicket?.operatorResponsable) {
+      changes.push(`Operador responsable cambiado de '${oldTicket?.operatorResponsable || 'N/A'}' a '${updateTicketDto.operatorResponsable}'`);
+      oldValue.operatorResponsable = oldTicket?.operatorResponsable || 'N/A';
+      newValue.operatorResponsable = updateTicketDto.operatorResponsable;
+    }
+
+    if (changes.length > 0) {
+      const userData = req ? (req as any).user : null;
+      const userEmail = userData?.email || 'SYSTEM (Automático)';
+      const userId = userData?.sub || userData?._id || 'SYSTEM';
+
+      await this.createAuditLog(
+        id,
+        'TICKET',
+        'UPDATE',
+        { email: userEmail, sub: userId },
+        oldValue,
+        newValue,
+        req || {} as Request,
+        `Asignación de operador: ${changes.join(', ')}`
+      );
+
+      this.logger.log(`✅ Auditoría creada: ${changes.join(', ')}`);
+    }
+  }
+
+  return updatedTicket;
+}
+
+  async closeTicket(id: string,updateDto?: any, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
     try {
       objectId = new ObjectId(id);
@@ -363,6 +415,7 @@ private buildSearchFilter(filters: {
     if (!ticket) {
       throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
     }
+
 
     const horaCierre = new Date();
     
@@ -407,6 +460,10 @@ private buildSearchFilter(filters: {
     descripcion: finalDescription,
     updatedAt: new Date(),
   };
+  if (updateDto) {
+      if (updateDto.escaladoPor) updateData.escaladoPor = updateDto.escaladoPor;
+      if (updateDto.imputable) updateData.imputable = updateDto.imputable;
+    }
 
     await this.ticketRepository.updateOne(
       { _id: objectId },
@@ -415,6 +472,8 @@ private buildSearchFilter(filters: {
 
     if (req) {
       const userData = (req as any).user;
+            await this.notificationsService.notifyTicketClosure(ticket, userData?._id?.toString() || 'SYSTEM');
+
       await this.createAuditLog(
         id,
         'TICKET',
@@ -694,4 +753,98 @@ private buildSearchFilter(filters: {
 
     return { servicios, totales };
   }
+
+  async findStaleTickets(beforeDate: Date) {
+  return await this.ticketRepository.find({
+    where: {
+      updatedAt: { $lte: beforeDate },
+      status: { 
+        $not: { $regex: /cerrado|closed|resuelto|cancelado/i } 
+      },
+      
+    },
+  });
+}
+
+async findDelayedTickets(beforeDate: Date) {
+  return await this.ticketRepository.find({
+    where: {
+      updatedAt: { $lte: beforeDate },
+      operatorAsignado: { $exists: true },
+      status: { 
+        $not: { $regex: /cerrado|closed|resuelto|cancelado/i } 
+      },
+    },
+  });
+}
+
+
+  // ✅ 1. Buscar tickets sin actualizar por 4h Y SIN operador asignado
+  async findUnassignedStaleTickets(beforeDate: Date) {
+    return await this.ticketRepository.find({
+      where: {
+        updatedAt: { $lte: beforeDate },
+        status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } },
+        $or: [
+          { operatorAsignado: { $exists: false } },
+          { operatorAsignado: null },
+          { operatorAsignado: '' }
+        ]
+      },
+    } as any);
+  }
+
+  // ✅ 2. Obtener el operador activo con menos tickets en gestión
+// ✅ Obtener el operador ONLINE con menos tickets en gestión
+async getLeastLoadedOperator() {
+  // 1. Obtener IDs de usuarios activos (online en los últimos 10 min)
+  const activeUserIds = await this.userSessionsService.getActiveUserIds();
+  
+  if (activeUserIds.length === 0) {
+    this.logger?.warn('⚠️ No hay usuarios online disponibles para asignación');
+    return null;
+  }
+
+  // 2. Contar tickets activos por operador (solo para los online)
+  const counts = await this.ticketRepository.aggregate([
+    { 
+      $match: { 
+        status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } }, 
+        operatorAsignado: { $in: activeUserIds } // Solo contar para usuarios online
+      } 
+    },
+    { $group: { _id: '$operatorAsignado', activeTickets: { $sum: 1 } } }
+  ]).toArray();
+
+  // 3. Obtener los datos completos de los usuarios online
+  const allUsers = await this.usersService.findAll({ isActive: true });
+  
+  // Filtrar solo los que están online y tienen rol válido
+  const onlineOperators = allUsers.filter(u => 
+    activeUserIds.includes(u._id.toString()) &&
+    (u.role === 'operador' || u.role === 'admin' || u.role === 'editor')
+  );
+
+  if (onlineOperators.length === 0) {
+    this.logger?.warn('⚠️ No hay operadores online disponibles');
+    return null;
+  }
+
+  // 4. Asignar la carga a cada operador online
+  const operatorsWithLoad = onlineOperators.map(op => {
+    const countData = counts.find(c => c._id === op._id.toString());
+    return {
+      user: op,
+      load: countData ? countData.activeTickets : 0
+    };
+  });
+
+  // 5. Ordenar por carga ascendente y devolver el que tenga menos
+  operatorsWithLoad.sort((a, b) => a.load - b.load);
+  
+  const selected = operatorsWithLoad[0].user;
+  this.logger?.log(`✅ Operador seleccionado: ${selected.email} con ${operatorsWithLoad[0].load} tickets activos`);
+  
+  return selected;
+}
 }

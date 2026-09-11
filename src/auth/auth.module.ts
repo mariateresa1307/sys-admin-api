@@ -10,13 +10,16 @@ import { AuditLog } from './entities/audit-log.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { RolesGuard } from './guards/roles.guard';
-
+import { TicketModule } from '../ticket/ticket.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     ConfigModule,
     PassportModule,
     UsersModule,
+    TicketModule,
+    NotificationsModule,
     TypeOrmModule.forFeature([AuditLog]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
