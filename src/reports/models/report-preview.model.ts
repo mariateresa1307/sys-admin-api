@@ -46,6 +46,15 @@ export interface ReporteModelGroupC extends ReportPreviewModel {
   promedioPorOperador?: number;
   cantidadOperadores?: number;
     ticketsDetalle?: any[];
+     totalTicketsCerrados?: number;
+  totalTicketsActivos?: number;
+  totalTicketsGeneral?: number;
+  ticketsDia?: number;
+  ticketsNoche?: number;
+    recibidosDia?: number;
+  recibidosNoche?: number;
+  cerradosDia?: number;
+  cerradosNoche?: number;
 }
 
 // ✅ GRUPO D — Calidad y mejora

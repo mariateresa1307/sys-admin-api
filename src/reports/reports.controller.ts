@@ -50,6 +50,8 @@ export class ReportsController {
     // Definir columnas
     worksheet.columns = [
       { header: 'ID Ticket', key: 'numeroTicket', width: 15 },
+      { header: 'Estado', key: 'status', width: 15 },
+      { header: 'Afectación', key: 'afectacion', width: 15 },
       { header: 'Fecha Creación', key: 'fechaCreacion', width: 20 },
       { header: 'Fecha Cierre', key: 'fechaCierre', width: 20 },
       { header: 'Tipo Incidencia', key: 'tipoIncidencia', width: 20 },
@@ -66,6 +68,8 @@ export class ReportsController {
     tickets.forEach(ticket => {
       worksheet.addRow({
         numeroTicket: ticket.numeroTicket || 'N/A',
+        status: ticket.status || 'N/A',
+        afectacion: ticket.afectacion || 'N/A',
         fechaCreacion: dayjs(ticket.createdAt).format('YYYY-MM-DD HH:mm:ss'),
         fechaCierre: dayjs(ticket.closedAt || ticket.updatedAt).format('YYYY-MM-DD HH:mm:ss'),
         tipoIncidencia: ticket.tipoIncidencia || 'N/A',

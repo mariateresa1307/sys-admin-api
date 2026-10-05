@@ -35,6 +35,8 @@ export class TicketController {
     @Query('status') status?: string,
     @Query('primerNombre') primerNombre?: string,
     @Query('operatorId') operatorId?: string,
+    @Query('tipoCliente') tipoCliente?: string,
+    @Query('incidentType') incidentType?: string,
   ) {
     const pageNumber = Number(page) || 1;
     const limitNumber = Number(limit) || 10;
@@ -44,6 +46,8 @@ export class TicketController {
       status,
       primerNombre,
       operatorId,
+      tipoCliente,
+      incidentType,
     });
   }
 

@@ -1,9 +1,12 @@
-import { IsNotEmpty, IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsArray, IsBoolean, Matches } from 'class-validator';
 import { CreateDateColumn } from 'typeorm';
 
 export class TicketDto {
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'El número de caso es obligatorio' })
+   @Matches(/^[A-Z]{4}-\d{6}$/, {
+    message: 'El número de caso debe tener el formato: 4 letras mayúsculas, guion y 6 números (ej. DIST-506009)',
+  })
   caseNumber!: string;
 
   @IsString()

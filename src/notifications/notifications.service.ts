@@ -103,29 +103,30 @@ export class NotificationsService {
     this.logger.log(`🔔 Notificación de asignación manual enviada para ticket ${ticket.caseNumber}`);
   }
 
-  // ✅ NUEVO: Crear notificación de resumen al iniciar sesión
-  async notifyLoginSummary(userId: string) {
-    try {
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-      const staleTickets = await this.ticketsService.findDelayedTickets(twoHoursAgo);
+// ✅ NUEVO: Crear notificación de resumen al iniciar sesión
+async notifyLoginSummary(userId: string) {
+  try {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const staleTickets = await this.ticketsService.findDelayedTickets(twoHoursAgo);
 
-      if (staleTickets.length > 0) {
-        const ticketNumbers = staleTickets.map(t => t.caseNumber).join(', ');
-        
-        await this.createNotification({
-          userId,
-          title: `⚠️ ${staleTickets.length} ticket(s) sin actualización`,
-          message: `Al iniciar sesión, detectamos ${staleTickets.length} ticket(s) con más de 2 horas sin avances: ${ticketNumbers}`,
-          type: 'login_stale_alert',
-          ticketNumber: staleTickets[0].caseNumber,
-        });
+    if (staleTickets.length > 0) {
+      // ✅ Extraer los números de caso de los tickets
+      const ticketNumbers = staleTickets.map(t => t.caseNumber).join(', ');
+      
+      await this.createNotification({
+        userId,
+        title: `⚠️ ${staleTickets.length} ticket(s) sin actualización`,
+        message: `Al iniciar sesión, detectamos ${staleTickets.length} ticket(s) con más de 2 horas sin avances: ${ticketNumbers}`,
+        type: 'login_stale_alert',
+        ticketNumber: staleTickets[0].caseNumber,
+      });
 
-        this.logger.log(`🔔 Notificación de ${staleTickets.length} tickets stale enviada al login`);
-      }
-    } catch (error) {
-      this.logger.error('Error creando notificación de login:', error);
+      this.logger.log(`🔔 Notificación de ${staleTickets.length} tickets stale enviada al login: ${ticketNumbers}`);
     }
+  } catch (error) {
+    this.logger.error('Error creando notificación de login:', error);
   }
+}
 
   // ==========================================
   // CRON JOBS

@@ -21,7 +21,7 @@ import { AuditLog } from '../auth/entities/audit-log.entity';
 import { Miscellaneous } from '../miscellaneous/entities/miscellaneous.entity';
 import { Service } from '../service/entities/service.entity';
 import { getClientIp } from '../utils/constants/get-client-ip';
-import { UserSessionsService } from '../userSessions/userSessions.service'; 
+import { UserSessionsService } from '../userSessions/userSessions.service';
 import { NotificationsService } from '../notifications/notifications.service';
 @Injectable()
 export class TicketService {
@@ -31,28 +31,35 @@ export class TicketService {
     @InjectRepository(Ticket)
     private readonly ticketRepository: MongoRepository<Ticket>,
     private readonly usersService: UsersService,
-    private readonly userSessionsService: UserSessionsService, 
-     @Inject(forwardRef(() => NotificationsService))
+    private readonly userSessionsService: UserSessionsService,
+    @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: MongoRepository<AuditLog>,
     @InjectRepository(Miscellaneous)
     private readonly miscellaneousRepository: MongoRepository<Miscellaneous>,
-    @InjectRepository(Service) 
+    @InjectRepository(Service)
     private readonly serviceRepository: MongoRepository<Service>,
-  ) {}
+  ) { }
 
-  async createTicket(createTicketDto: TicketDto,  userId?: string): Promise<Ticket> {
+  async createTicket(createTicketDto: TicketDto, userId?: string): Promise<Ticket> {
+    // 1. Validación de formato de seguridad (por si el DTO es omitido)
+    if (!/^[A-Z]{4}-\d{6}$/.test(createTicketDto.caseNumber)) {
+      throw new BadRequestException('El número de caso debe tener el formato: 4 letras mayúsculas, guion y 6 números (ej. DIST-506009)');
+    }
+
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 5;
     let currentCaseNumber = createTicketDto.caseNumber;
 
+    // 2. Bucle para garantizar que no haya repetición en la BD
     while (attempts < maxAttempts) {
-      const existingTicket = await this.ticketRepository.findOne({ 
-        caseNumber: currentCaseNumber 
+      const existingTicket = await this.ticketRepository.findOne({
+        caseNumber: currentCaseNumber
       } as any);
 
       if (!existingTicket) {
+        // ✅ No existe, es seguro crearlo
         const newTicket = this.ticketRepository.create({
           ...createTicketDto,
           caseNumber: currentCaseNumber,
@@ -62,35 +69,38 @@ export class TicketService {
         return Array.isArray(savedTicket) ? savedTicket[0]! : savedTicket;
       }
 
+      // ⚠️ Ya existe, generamos uno nuevo con el mismo prefijo
       attempts++;
-      const prefix = currentCaseNumber.split('-')[0] || 'TCK';
-      const randomNum = Math.floor(100000 + Math.random() * 900000);
+      const prefix = currentCaseNumber.split('-')[0] || 'TCKT';
+      const randomNum = Math.floor(100000 + Math.random() * 900000).toString();
       currentCaseNumber = `${prefix}-${randomNum}`;
-      
     }
 
-    throw new BadRequestException('No se pudo generar un número de ticket único. Intente nuevamente.');
+    throw new BadRequestException('No se pudo generar un número de ticket único después de varios intentos. Intente nuevamente.');
   }
 
-  async findAllPaginated(
+async findAllPaginated(
     page = 1,
     limit = 10,
     filters: {
       caseNumber?: string;
       subject?: string;
       status?: string;
-      excludeStatus?: string; 
+      excludeStatus?: string;
       primerNombre?: string;
       operatorId?: string;
+      tipoCliente?: string; 
+      incidentType?: string;
     } = {},
   ) {
-     console.log('🔍 [findAllPaginated] Filtros recibidos:', filters);
-  console.log('🔍 [findAllPaginated] Status enviado:', JSON.stringify(filters.status));
-  
+    console.log('🔍 [findAllPaginated] Filtros recibidos:', filters);
+
     const take = limit > 0 ? limit : 10;
     const skip = page > 1 ? (page - 1) * take : 0;
-    const where = this.buildSearchFilter(filters);
-    
+    const where = await this.buildSearchFilter(filters);
+
+    console.log('🔍 [findAllPaginated] Where generado:', JSON.stringify(where, null, 2));
+
     const findOptions: Record<string, unknown> = {
       skip,
       take,
@@ -103,45 +113,48 @@ export class TicketService {
 
     const [data, total] = await Promise.all([
       this.ticketRepository.find(findOptions as any)
-        .then(tickets => Promise.all(
-          tickets.map(async (ticket) => {
-             if (ticket.tipoCliente && typeof ticket.tipoCliente === 'string') {
-              try {
-                const tipoClienteDoc = await this.miscellaneousRepository.findOne({ 
-                  _id: new ObjectId(ticket.tipoCliente) 
-                } as any);
-                if (tipoClienteDoc) {
-                  (ticket as any).tipoCliente = tipoClienteDoc;
-                }
-              } catch (error) {
-                console.warn('⚠️ Error populando tipoCliente:', error);
-              }
-            }
-
-            if (Array.isArray(ticket.serviciosAfectados) && ticket.serviciosAfectados.length > 0) {
-              try {
-                const idsValidos = ticket.serviciosAfectados
-                  .filter((id: any) => typeof id === 'string' && id.length === 24);
-                
-                if (idsValidos.length > 0) {
-                  const serviciosEncontrados = await this.serviceRepository.find({
-                    where: {
-                      _id: { $in: idsValidos.map((id: string) => new ObjectId(id)) }
-                    } as any
-                  });
-                  
-                  if (serviciosEncontrados.length > 0) {
-                    ticket.serviciosAfectados = serviciosEncontrados as any;
+        .then(tickets => {
+          console.log(`📦 [findAllPaginated] Tickets encontrados en BD: ${tickets.length}`);
+          return Promise.all(
+            tickets.map(async (ticket) => {
+              if (ticket.tipoCliente && typeof ticket.tipoCliente === 'string') {
+                try {
+                  const tipoClienteDoc = await this.miscellaneousRepository.findOne({
+                    _id: new ObjectId(ticket.tipoCliente)
+                  } as any);
+                  if (tipoClienteDoc) {
+                    (ticket as any).tipoCliente = tipoClienteDoc;
                   }
+                } catch (error) {
+                  console.warn('⚠️ Error populando tipoCliente:', error);
                 }
-              } catch (error) {
-                console.warn('⚠️ Error populando serviciosAfectados:', error);
               }
-            }
-            
-            return ticket;
-          })
-        )),
+
+              if (Array.isArray(ticket.serviciosAfectados) && ticket.serviciosAfectados.length > 0) {
+                try {
+                  const idsValidos = ticket.serviciosAfectados
+                    .filter((id: any) => typeof id === 'string' && id.length === 24);
+
+                  if (idsValidos.length > 0) {
+                    const serviciosEncontrados = await this.serviceRepository.find({
+                      where: {
+                        _id: { $in: idsValidos.map((id: string) => new ObjectId(id)) }
+                      } as any
+                    });
+
+                    if (serviciosEncontrados.length > 0) {
+                      ticket.serviciosAfectados = serviciosEncontrados as any;
+                    }
+                  }
+                } catch (error) {
+                  console.warn('⚠️ Error populando serviciosAfectados:', error);
+                }
+              }
+
+              return ticket;
+            })
+          );
+        }),
       where ? this.ticketRepository.count(where) : this.ticketRepository.count(),
     ]);
 
@@ -207,65 +220,88 @@ export class TicketService {
     }));
   }
 
-private buildSearchFilter(filters: {
-  caseNumber?: string;
-  subject?: string;
-  status?: string;
-  excludeStatus?: string; 
-  primerNombre?: string;
-  operatorId?: string;
-}) {
-  const where: Record<string, unknown> = {};
+  private async buildSearchFilter(filters: {
+    caseNumber?: string;
+    subject?: string;
+    status?: string;
+    excludeStatus?: string;
+    primerNombre?: string;
+    operatorId?: string;
+    tipoCliente?: string; 
+    incidentType?: string; 
+  }) {
+    const where: Record<string, unknown> = {};
 
-  if (filters.caseNumber?.trim()) {
-    where.caseNumber = { $regex: filters.caseNumber.trim(), $options: 'i' };
-  }
-
-  if (filters.subject?.trim()) {
-    where.subject = { $regex: filters.subject.trim(), $options: 'i' };
-  }
-
-  if (filters.status?.trim()) {
-    const statusArray = filters.status
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-    
-    console.log('🔍 [buildSearchFilter] Status array procesado:', statusArray);
-    
-    if (statusArray.length > 1) {
-      where.status = {
-        $in: statusArray.map(s => new RegExp(`^${s}$`, 'i')),
-      };
-    } else if (statusArray.length === 1) {
-      where.status = new RegExp(`^${statusArray[0]}$`, 'i');
+    if (filters.caseNumber?.trim()) {
+      where.caseNumber = { $regex: filters.caseNumber.trim(), $options: 'i' };
     }
-  } else if (filters.excludeStatus?.trim()) {
-    where.status = {
-      $not: new RegExp(`^${filters.excludeStatus.trim()}$`, 'i'),
-    };
+
+    if (filters.subject?.trim()) {
+      where.subject = { $regex: filters.subject.trim(), $options: 'i' };
+    }
+
+    if (filters.status?.trim()) {
+      const statusArray = filters.status.split(',').map(s => s.trim()).filter(Boolean);
+      if (statusArray.length > 1) {
+        where.status = { $in: statusArray.map(s => new RegExp(`^${s}$`, 'i')) };
+      } else if (statusArray.length === 1) {
+        where.status = new RegExp(`^${statusArray[0]}$`, 'i');
+      }
+    } else if (filters.excludeStatus?.trim()) {
+      where.status = { $not: new RegExp(`^${filters.excludeStatus.trim()}$`, 'i') };
+    }
+
+    if (filters.operatorId?.trim() || filters.primerNombre?.trim()) {
+      const orConditions: any[] = [];
+      if (filters.operatorId?.trim()) {
+        orConditions.push({ operatorAsignado: filters.operatorId.trim() });
+        orConditions.push({ operatorResponsable: filters.operatorId.trim() });
+      }
+      if (filters.primerNombre?.trim()) {
+        const term = filters.primerNombre.trim();
+        orConditions.push({ operatorResponsable: { $regex: term, $options: 'i' } });
+        orConditions.push({ operatorAsignado: { $regex: term, $options: 'i' } });
+        orConditions.push({ operador: { $regex: term, $options: 'i' } });
+      }
+      if (orConditions.length > 0) where.$or = orConditions;
+    }
+
+    // ✅ SOLUCIÓN DEFINITIVA: Buscar por string O por ObjectId usando $or
+   if (filters.tipoCliente?.trim()) {
+      const searchValue = filters.tipoCliente.trim();
+      console.log('🔍 [buildSearchFilter] Filtrando por tipoCliente:', searchValue);
+      
+      if (/^[0-9a-fA-F]{24}$/.test(searchValue)) {
+        try {
+          // $in es perfectamente válido a nivel de campo en MongoDB
+          where.tipoCliente = { 
+            $in: [
+              searchValue,              // Coincide si está guardado como string
+              new ObjectId(searchValue) // Coincide si está guardado como ObjectId
+            ] 
+          };
+          console.log('🔍 [buildSearchFilter] Buscando con $in (string u ObjectId)');
+        } catch (e) {
+          // Fallback por si acaso
+          where.tipoCliente = searchValue;
+        }
+      } else {
+        // Es un nombre (FALLA MASIVA, VENTANA, etc.)
+        where.tipoCliente = searchValue;
+      }
+    }
+
+    if (filters.incidentType?.trim()) {
+      const searchValue = filters.incidentType.trim();
+      console.log(' [buildSearchFilter] Filtrando por incidentType:', searchValue);
+      where.incidentType = { $regex: searchValue, $options: 'i' };
+    }
+
+    console.log('🔍 [buildSearchFilter] Where final:', JSON.stringify(where, null, 2));
+    return Object.keys(where).length > 0 ? where : null;
   }
 
-  if (filters.operatorId?.trim()) {
-    where.$or = [
-      { operatorAsignado: filters.operatorId.trim() },
-      { operatorResponsable: filters.operatorId.trim() },
-    ];
-  }
 
-  if (filters.primerNombre?.trim()) {
-    const term = filters.primerNombre.trim();
-    // ⚠️ OJO: esto sobreescribe el $or anterior si operatorId también estaba
-    where.$or = [
-      { operatorResponsable: { $regex: term, $options: 'i' } },
-      { operatorAsignado: { $regex: term, $options: 'i' } },
-      { operador: { $regex: term, $options: 'i' } },
-    ];
-  }
-
-  console.log('🔍 [buildSearchFilter] Where final:', JSON.stringify(where, null, 2));
-  return Object.keys(where).length > 0 ? where : null;
-}
 
   async findTicketById(id: string): Promise<Ticket> {
     let objectId: ObjectId;
@@ -290,14 +326,14 @@ private buildSearchFilter(filters: {
             return null;
           })
           .filter((idStr: string | null): idStr is string => idStr !== null);
-        
+
         if (idsValidos.length > 0) {
           const serviciosEncontrados = await this.serviceRepository.find({
             where: {
               _id: { $in: idsValidos.map((idStr: string) => new ObjectId(idStr)) }
             } as any
           });
-          
+
           if (serviciosEncontrados.length > 0) {
             ticket.serviciosAfectados = serviciosEncontrados as any;
           }
@@ -306,7 +342,7 @@ private buildSearchFilter(filters: {
         console.warn('⚠️ Error populando serviciosAfectados:', error);
       }
     }
- 
+
     return {
       ...ticket,
       createdAt: ticket.createdAt || ticket._id.getTimestamp(),
@@ -314,96 +350,100 @@ private buildSearchFilter(filters: {
     };
   }
 
-async updateTicket(
-  id: string,
-  updateTicketDto: UpdateTicketDto,
-  req?: Request, 
-): Promise<Ticket> {
-  let objectId: ObjectId;
-  try {
-    objectId = new ObjectId(id);
-  } catch {
-    throw new BadRequestException('ID inválido');
-  }
-
-  // ✅ OBTENER EL TICKET ANTES DE VALIDAR PARA CONOCER SU ESTADO ACTUAL EN BD
-  const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
-
-  // ✅ VALIDACIÓN INTELIGENTE: Solo exigir campos de cierre si REALMENTE se está cerrando AHORA
-  // Es decir: el nuevo estado es CERRADO Y el estado anterior NO era CERRADO
-  const isClosingNow = 
-    (updateTicketDto.status === 'CERRADO' || updateTicketDto.status === 'cerrado') &&
-    (oldTicket?.status !== 'CERRADO' && oldTicket?.status !== 'cerrado');
-
-  if (isClosingNow) {
-    if (!updateTicketDto.escaladoPor || updateTicketDto.escaladoPor.trim() === '' || 
-        !updateTicketDto.imputable || updateTicketDto.imputable.trim() === '') {
-      throw new BadRequestException('No se puede cerrar el ticket: Los campos "Escalado por" e "Imputable a" son obligatorios.');
+  async updateTicket(
+    id: string,
+    updateTicketDto: UpdateTicketDto,
+    req?: Request,
+  ): Promise<Ticket> {
+    let objectId: ObjectId;
+    try {
+      objectId = new ObjectId(id);
+    } catch {
+      throw new BadRequestException('ID inválido');
     }
-  }
 
-  const updateData = Object.fromEntries(
-    Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
-  );
+    // ✅ OBTENER EL TICKET ANTES DE VALIDAR PARA CONOCER SU ESTADO ACTUAL EN BD
+    const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
+    const nuevoResponsable = updateTicketDto.operatorResponsable || oldTicket?.operatorResponsable;
+    const nuevoAsignado = updateTicketDto.operatorAsignado || oldTicket?.operatorAsignado;
+    if (nuevoAsignado && nuevoResponsable && nuevoAsignado === nuevoResponsable) {
+      throw new BadRequestException('El operador asignado no puede ser el mismo que el operador responsable.');
+    }
+    // ✅ VALIDACIÓN INTELIGENTE: Solo exigir campos de cierre si REALMENTE se está cerrando AHORA
+    // Es decir: el nuevo estado es CERRADO Y el estado anterior NO era CERRADO
+    const isClosingNow =
+      (updateTicketDto.status === 'CERRADO' || updateTicketDto.status === 'cerrado') &&
+      (oldTicket?.status !== 'CERRADO' && oldTicket?.status !== 'cerrado');
 
-  if (updateTicketDto.operatorAsignado && updateTicketDto.operatorAsignado !== oldTicket?.operatorAsignado) {
-    updateData.fechaAsignacionOpA = new Date().toISOString();
-  }
-  updateData.updatedAt = new Date();
+    if (isClosingNow) {
+      if (!updateTicketDto.escaladoPor || updateTicketDto.escaladoPor.trim() === '' ||
+        !updateTicketDto.imputable || updateTicketDto.imputable.trim() === '') {
+        throw new BadRequestException('No se puede cerrar el ticket: Los campos "Escalado por" e "Imputable a" son obligatorios.');
+      }
+    }
 
-  const result = await this.ticketRepository.updateOne(
-    { _id: objectId },
-    { $set: updateData },
-  );
-
-  if (result.matchedCount === 0) {
-    throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
-  }
-
-  const updatedTicket = await this.findTicketById(id);
-
-  // ✅ CREAR AUDITORÍA DIRECTAMENTE
-  if (updateTicketDto.operatorAsignado || updateTicketDto.operatorResponsable) {
-    const changes = [];
-    const oldValue: any = {};
-    const newValue: any = {};
+    const updateData = Object.fromEntries(
+      Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
+    );
 
     if (updateTicketDto.operatorAsignado && updateTicketDto.operatorAsignado !== oldTicket?.operatorAsignado) {
-      changes.push(`Operador asignado cambiado de '${oldTicket?.operatorAsignado || 'N/A'}' a '${updateTicketDto.operatorAsignado}'`);
-      oldValue.operatorAsignado = oldTicket?.operatorAsignado || 'N/A';
-      newValue.operatorAsignado = updateTicketDto.operatorAsignado;
+      updateData.fechaAsignacionOpA = new Date().toISOString();
+    }
+    updateData.updatedAt = new Date();
+
+    const result = await this.ticketRepository.updateOne(
+      { _id: objectId },
+      { $set: updateData },
+    );
+
+    if (result.matchedCount === 0) {
+      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
     }
 
-    if (updateTicketDto.operatorResponsable && updateTicketDto.operatorResponsable !== oldTicket?.operatorResponsable) {
-      changes.push(`Operador responsable cambiado de '${oldTicket?.operatorResponsable || 'N/A'}' a '${updateTicketDto.operatorResponsable}'`);
-      oldValue.operatorResponsable = oldTicket?.operatorResponsable || 'N/A';
-      newValue.operatorResponsable = updateTicketDto.operatorResponsable;
+    const updatedTicket = await this.findTicketById(id);
+
+    // ✅ CREAR AUDITORÍA DIRECTAMENTE
+    if (updateTicketDto.operatorAsignado || updateTicketDto.operatorResponsable) {
+      const changes = [];
+      const oldValue: any = {};
+      const newValue: any = {};
+
+      if (updateTicketDto.operatorAsignado && updateTicketDto.operatorAsignado !== oldTicket?.operatorAsignado) {
+        changes.push(`Operador asignado cambiado de '${oldTicket?.operatorAsignado || 'N/A'}' a '${updateTicketDto.operatorAsignado}'`);
+        oldValue.operatorAsignado = oldTicket?.operatorAsignado || 'N/A';
+        newValue.operatorAsignado = updateTicketDto.operatorAsignado;
+      }
+
+      if (updateTicketDto.operatorResponsable && updateTicketDto.operatorResponsable !== oldTicket?.operatorResponsable) {
+        changes.push(`Operador responsable cambiado de '${oldTicket?.operatorResponsable || 'N/A'}' a '${updateTicketDto.operatorResponsable}'`);
+        oldValue.operatorResponsable = oldTicket?.operatorResponsable || 'N/A';
+        newValue.operatorResponsable = updateTicketDto.operatorResponsable;
+      }
+
+      if (changes.length > 0) {
+        const userData = req ? (req as any).user : null;
+        const userEmail = userData?.email || 'SYSTEM (Automático)';
+        const userId = userData?.sub || userData?._id || 'SYSTEM';
+
+        await this.createAuditLog(
+          id,
+          'TICKET',
+          'UPDATE',
+          { email: userEmail, sub: userId },
+          oldValue,
+          newValue,
+          req || {} as Request,
+          `Asignación de operador: ${changes.join(', ')}`
+        );
+
+        this.logger.log(`✅ Auditoría creada: ${changes.join(', ')}`);
+      }
     }
 
-    if (changes.length > 0) {
-      const userData = req ? (req as any).user : null;
-      const userEmail = userData?.email || 'SYSTEM (Automático)';
-      const userId = userData?.sub || userData?._id || 'SYSTEM';
-
-      await this.createAuditLog(
-        id,
-        'TICKET',
-        'UPDATE',
-        { email: userEmail, sub: userId },
-        oldValue,
-        newValue,
-        req || {} as Request,
-        `Asignación de operador: ${changes.join(', ')}`
-      );
-
-      this.logger.log(`✅ Auditoría creada: ${changes.join(', ')}`);
-    }
+    return updatedTicket;
   }
 
-  return updatedTicket;
-}
-
-  async closeTicket(id: string,updateDto?: any, req?: Request): Promise<Ticket> {
+  async closeTicket(id: string, updateDto?: any, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
     try {
       objectId = new ObjectId(id);
@@ -418,32 +458,32 @@ async updateTicket(
 
 
     const horaCierre = new Date();
-    
+
     const formatDate = (dateVal: any) => {
-  if (!dateVal) return 'N/A';
-  try {
-    return new Date(dateVal).toLocaleString('es-VE', {
-      timeZone: 'America/Caracas',
-      year: 'numeric', 
-      month: '2-digit', 
-      day: '2-digit',
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return 'N/A';
-  }
-};
+      if (!dateVal) return 'N/A';
+      try {
+        return new Date(dateVal).toLocaleString('es-VE', {
+          timeZone: 'America/Caracas',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+      } catch {
+        return 'N/A';
+      }
+    };
 
     const currentDescription = ticket.description || ticket.bitacora || '';
-    
+
     const lineaCierre = `Fecha y hora de cierre ticket: ${formatDate(horaCierre)}`;
-    
+
     let finalDescription = currentDescription;
     if (!currentDescription.includes('Fecha y hora de cierre ticket:')) {
-      finalDescription = currentDescription 
-        ? `${currentDescription}\n${lineaCierre}` 
+      finalDescription = currentDescription
+        ? `${currentDescription}\n${lineaCierre}`
         : lineaCierre;
     } else {
       finalDescription = currentDescription.replace(
@@ -452,15 +492,15 @@ async updateTicket(
       );
     }
 
-     const updateData: any = {
-    status: TICKET_STATUS.CERRADO,
-    horaCierreFalla: horaCierre,
-    horaCierre: horaCierre,
-    description: finalDescription,
-    descripcion: finalDescription,
-    updatedAt: new Date(),
-  };
-  if (updateDto) {
+    const updateData: any = {
+      status: TICKET_STATUS.CERRADO,
+      horaCierreFalla: horaCierre,
+      horaCierre: horaCierre,
+      description: finalDescription,
+      descripcion: finalDescription,
+      updatedAt: new Date(),
+    };
+    if (updateDto) {
       if (updateDto.escaladoPor) updateData.escaladoPor = updateDto.escaladoPor;
       if (updateDto.imputable) updateData.imputable = updateDto.imputable;
     }
@@ -472,7 +512,7 @@ async updateTicket(
 
     if (req) {
       const userData = (req as any).user;
-            await this.notificationsService.notifyTicketClosure(ticket, userData?._id?.toString() || 'SYSTEM');
+      await this.notificationsService.notifyTicketClosure(ticket, userData?._id?.toString() || 'SYSTEM');
 
       await this.createAuditLog(
         id,
@@ -504,7 +544,7 @@ async updateTicket(
     }
 
     const userData = (req as any).user;
-    
+
     if (!userData || (userData.isAdmin !== true && userData.role !== 'admin')) {
       throw new ForbiddenException('Solo los administradores pueden reabrir tickets');
     }
@@ -546,7 +586,7 @@ async updateTicket(
     details: string,
   ) {
     try {
-       const rawUserId = user?.sub ?? user?._id;
+      const rawUserId = user?.sub ?? user?._id;
       const userEmail = user?.email ?? user?.userEmail;
       const auditData = {
         userId: rawUserId ? this.safeObjectId(rawUserId) : undefined,
@@ -601,7 +641,7 @@ async updateTicket(
     };
 
     const miscFields = [
-      'networkCategory', 'subcategoria', 'detalle', 'tipoCliente', 
+      'networkCategory', 'subcategoria', 'detalle', 'tipoCliente',
       'escaladoA', 'causaRaiz', 'SolucionCaso'
     ];
     for (const field of miscFields) {
@@ -755,28 +795,28 @@ async updateTicket(
   }
 
   async findStaleTickets(beforeDate: Date) {
-  return await this.ticketRepository.find({
-    where: {
-      updatedAt: { $lte: beforeDate },
-      status: { 
-        $not: { $regex: /cerrado|closed|resuelto|cancelado/i } 
-      },
-      
-    },
-  });
-}
+    return await this.ticketRepository.find({
+      where: {
+        updatedAt: { $lte: beforeDate },
+        status: {
+          $not: { $regex: /cerrado|closed|resuelto|cancelado/i }
+        },
 
-async findDelayedTickets(beforeDate: Date) {
-  return await this.ticketRepository.find({
-    where: {
-      updatedAt: { $lte: beforeDate },
-      operatorAsignado: { $exists: true },
-      status: { 
-        $not: { $regex: /cerrado|closed|resuelto|cancelado/i } 
       },
-    },
-  });
-}
+    });
+  }
+
+  async findDelayedTickets(beforeDate: Date) {
+    return await this.ticketRepository.find({
+      where: {
+        updatedAt: { $lte: beforeDate },
+        operatorAsignado: { $exists: true },
+        status: {
+          $not: { $regex: /cerrado|closed|resuelto|cancelado/i }
+        },
+      },
+    });
+  }
 
 
   // ✅ 1. Buscar tickets sin actualizar por 4h Y SIN operador asignado
@@ -795,56 +835,56 @@ async findDelayedTickets(beforeDate: Date) {
   }
 
   // ✅ 2. Obtener el operador activo con menos tickets en gestión
-// ✅ Obtener el operador ONLINE con menos tickets en gestión
-async getLeastLoadedOperator() {
-  // 1. Obtener IDs de usuarios activos (online en los últimos 10 min)
-  const activeUserIds = await this.userSessionsService.getActiveUserIds();
-  
-  if (activeUserIds.length === 0) {
-    this.logger?.warn('⚠️ No hay usuarios online disponibles para asignación');
-    return null;
+  // ✅ Obtener el operador ONLINE con menos tickets en gestión
+  async getLeastLoadedOperator() {
+    // 1. Obtener IDs de usuarios activos (online en los últimos 10 min)
+    const activeUserIds = await this.userSessionsService.getActiveUserIds();
+
+    if (activeUserIds.length === 0) {
+      this.logger?.warn('⚠️ No hay usuarios online disponibles para asignación');
+      return null;
+    }
+
+    // 2. Contar tickets activos por operador (solo para los online)
+    const counts = await this.ticketRepository.aggregate([
+      {
+        $match: {
+          status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } },
+          operatorAsignado: { $in: activeUserIds } // Solo contar para usuarios online
+        }
+      },
+      { $group: { _id: '$operatorAsignado', activeTickets: { $sum: 1 } } }
+    ]).toArray();
+
+    // 3. Obtener los datos completos de los usuarios online
+    const allUsers = await this.usersService.findAll({ isActive: true });
+
+    // Filtrar solo los que están online y tienen rol válido
+    const onlineOperators = allUsers.filter(u =>
+      activeUserIds.includes(u._id.toString()) &&
+      (u.role === 'operador' || u.role === 'admin' || u.role === 'editor')
+    );
+
+    if (onlineOperators.length === 0) {
+      this.logger?.warn('⚠️ No hay operadores online disponibles');
+      return null;
+    }
+
+    // 4. Asignar la carga a cada operador online
+    const operatorsWithLoad = onlineOperators.map(op => {
+      const countData = counts.find(c => c._id === op._id.toString());
+      return {
+        user: op,
+        load: countData ? countData.activeTickets : 0
+      };
+    });
+
+    // 5. Ordenar por carga ascendente y devolver el que tenga menos
+    operatorsWithLoad.sort((a, b) => a.load - b.load);
+
+    const selected = operatorsWithLoad[0].user;
+    this.logger?.log(`✅ Operador seleccionado: ${selected.email} con ${operatorsWithLoad[0].load} tickets activos`);
+
+    return selected;
   }
-
-  // 2. Contar tickets activos por operador (solo para los online)
-  const counts = await this.ticketRepository.aggregate([
-    { 
-      $match: { 
-        status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } }, 
-        operatorAsignado: { $in: activeUserIds } // Solo contar para usuarios online
-      } 
-    },
-    { $group: { _id: '$operatorAsignado', activeTickets: { $sum: 1 } } }
-  ]).toArray();
-
-  // 3. Obtener los datos completos de los usuarios online
-  const allUsers = await this.usersService.findAll({ isActive: true });
-  
-  // Filtrar solo los que están online y tienen rol válido
-  const onlineOperators = allUsers.filter(u => 
-    activeUserIds.includes(u._id.toString()) &&
-    (u.role === 'operador' || u.role === 'admin' || u.role === 'editor')
-  );
-
-  if (onlineOperators.length === 0) {
-    this.logger?.warn('⚠️ No hay operadores online disponibles');
-    return null;
-  }
-
-  // 4. Asignar la carga a cada operador online
-  const operatorsWithLoad = onlineOperators.map(op => {
-    const countData = counts.find(c => c._id === op._id.toString());
-    return {
-      user: op,
-      load: countData ? countData.activeTickets : 0
-    };
-  });
-
-  // 5. Ordenar por carga ascendente y devolver el que tenga menos
-  operatorsWithLoad.sort((a, b) => a.load - b.load);
-  
-  const selected = operatorsWithLoad[0].user;
-  this.logger?.log(`✅ Operador seleccionado: ${selected.email} con ${operatorsWithLoad[0].load} tickets activos`);
-  
-  return selected;
-}
 }
