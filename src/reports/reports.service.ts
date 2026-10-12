@@ -31,15 +31,8 @@ export class ReportsService {
     const { grupo, plataforma, cliente, mes } = filterDto;
 
     const query: Filter<Ticket> = {};
-    
-    // ✅ SOLO aplicar filtros de cerrado y afectación si NO es el Grupo C
-    if (grupo !== 'C') {
-      query.status = TICKET_STATUS.CERRADO;
-      query.afectacion = true;
-    }
 
-    // ✅ FILTRO DE FECHA ROBUSTO: Prioriza horaCierreFalla, fallback a horaDeteccionNoc
-      // ✅ FILTRO DE FECHA ROBUSTO: Prioriza horaCierreFalla, fallback a horaDeteccionNoc
+
     if (mes) {
       const [year, month] = mes.split('-');
       const monthPadded = month.padStart(2, '0');
@@ -100,16 +93,8 @@ export class ReportsService {
   async GrupoA(tickets: any[], filterDto: ReportFilterDto): Promise<ReporteModelGroupA> {
     const { plataforma, cliente, mes } = filterDto;
 
-    const closedFilter: any = { status: TICKET_STATUS.CERRADO };
-    if (mes) {
-      const [year, month] = mes.split('-');
-      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
-      closedFilter.createdAt = { $gte: startDate, $lte: endDate };
-    }
-    if (plataforma && plataforma !== 'TODAS') closedFilter.networkCategory = plataforma;
-    if (cliente && cliente !== 'TODOS') closedFilter.tipoCliente = cliente;
-
+    // ✅ Ya no usamos 'closedFilter'. El array 'tickets' ya viene con TODOS los tickets del mes.
+    
     const [categoriasRed, tiposCliente] = await Promise.all([
       this.miscellaneousRepository.find({ categoria: CATEGORIA.CATEGORIA_RED }),
       this.miscellaneousRepository.find({ categoria: CATEGORIA.TIPO_CLIENTE }),
@@ -118,18 +103,21 @@ export class ReportsService {
     const categoryIds = categoriasRed.map((item) => item._id.toString());
     const tipoClienteIds = tiposCliente.map((item) => item._id.toString());
 
-    const [
-      incidentesPorPlataforma,
-      incidentesPorServicio,
-      totalTickets,
-      mttrByCategory,
-      mttrTipoCliente
-    ] = await Promise.all([
-      this.ticketRepository.count({ ...closedFilter, networkCategory: { $in: categoryIds } } as any),
-      this.ticketRepository.count({ ...closedFilter, tipoCliente: { $in: tipoClienteIds } } as any),
-      this.ticketRepository.count(closedFilter as any),
-      this.aggregateAverageMttrByField('networkCategory', categoryIds, closedFilter),
-      this.aggregateAverageMttrByField('tipoCliente', tipoClienteIds, closedFilter),
+    // ✅ Conteos directos sobre el array 'tickets' (incluye activos, en gestión y cerrados)
+    const incidentesPorPlataforma = tickets.filter(t => categoryIds.includes(String(t.networkCategory))).length;
+    const incidentesPorServicio = tickets.filter(t => tipoClienteIds.includes(String(t.tipoCliente))).length;
+    const totalTickets = tickets.length;
+
+    // Para el MTTR, calculamos el promedio solo sobre los tickets que realmente tienen tiempo registrado
+    const ticketsConMttr = tickets.filter(t => t.mttrTotal && t.mttrTotal > 0);
+    
+    const [mttrByCategory, mttrTipoCliente] = await Promise.all([
+      this.aggregateAverageMttrByField('networkCategory', categoryIds, { 
+        _id: { $in: ticketsConMttr.map(t => t._id) } 
+      }),
+      this.aggregateAverageMttrByField('tipoCliente', tipoClienteIds, {
+        _id: { $in: ticketsConMttr.map(t => t._id) }
+      }),
     ]);
 
     const ticketsResueltosSoporte = tickets.filter(t => {
@@ -142,6 +130,7 @@ export class ReportsService {
       return escaladoA === 'SI' || (escaladoA !== '' && escaladoA !== 'NO');
     }).length;
 
+    // ✅ Esto ahora contará correctamente Puntuales, Masivas y Mantenimiento de TODOS los tickets
     const incidentesPorTipo = this.countByTipoIncidencia(tickets);
 
     const fallasResueltasEnSoporte = totalTickets > 0
@@ -152,33 +141,18 @@ export class ReportsService {
     const mttrServicio = this.mapMttrByMiscellaneous(tiposCliente, mttrTipoCliente);
 
     // MTTR Tiempo Medio Plataforma (formateado como Xh Ym)
-    const ticketsConMttrPlataforma = tickets.filter(t => t.mttrTotal && t.networkCategory);
-    const totalMttrPlataforma = ticketsConMttrPlataforma.reduce((sum, t) => sum + (t.mttrTotal || 0), 0);
-    const avgMttrPlataformaMinutos = ticketsConMttrPlataforma.length > 0
-      ? Math.round(totalMttrPlataforma / ticketsConMttrPlataforma.length)
+    const totalMttrPlataforma = ticketsConMttr.filter(t => t.networkCategory).reduce((sum, t) => sum + (t.mttrTotal || 0), 0);
+    const avgMttrPlataformaMinutos = ticketsConMttr.filter(t => t.networkCategory).length > 0
+      ? Math.round(totalMttrPlataforma / ticketsConMttr.filter(t => t.networkCategory).length)
       : 0;
-    const horasPlataforma = Math.floor(avgMttrPlataformaMinutos / 60);
-    const minutosPlataforma = avgMttrPlataformaMinutos % 60;
-    const mttrPlataformaFormateado = `${horasPlataforma}h ${minutosPlataforma}m`;
+    const mttrPlataformaFormateado = `${Math.floor(avgMttrPlataformaMinutos / 60)}h ${avgMttrPlataformaMinutos % 60}m`;
 
     // MTTR Tiempo Medio Servicio (formateado como Xh Ym)
-    const ticketsConMttrServicio = tickets.filter(t => t.mttrTotal && t.tipoCliente);
-    const totalMttrServicio = ticketsConMttrServicio.reduce((sum, t) => sum + (t.mttrTotal || 0), 0);
-    const avgMttrServicioMinutos = ticketsConMttrServicio.length > 0
-      ? Math.round(totalMttrServicio / ticketsConMttrServicio.length)
+    const totalMttrServicio = ticketsConMttr.filter(t => t.tipoCliente).reduce((sum, t) => sum + (t.mttrTotal || 0), 0);
+    const avgMttrServicioMinutos = ticketsConMttr.filter(t => t.tipoCliente).length > 0
+      ? Math.round(totalMttrServicio / ticketsConMttr.filter(t => t.tipoCliente).length)
       : 0;
-    const horasServicio = Math.floor(avgMttrServicioMinutos / 60);
-    const minutosServicio = avgMttrServicioMinutos % 60;
-    const mttrServicioFormateado = `${horasServicio}h ${minutosServicio}m`;
-
-    console.log(' [ReportsService] MTTR calculado:', {
-      ticketsConMttrPlataforma: ticketsConMttrPlataforma.length,
-      minutosPlataforma: avgMttrPlataformaMinutos,
-      formateadoPlataforma: mttrPlataformaFormateado,
-      ticketsConMttrServicio: ticketsConMttrServicio.length,
-      minutosServicio: avgMttrServicioMinutos,
-      formateadoServicio: mttrServicioFormateado,
-    });
+    const mttrServicioFormateado = `${Math.floor(avgMttrServicioMinutos / 60)}h ${avgMttrServicioMinutos % 60}m`;
 
     // ✅ Resolver IDs de misceláneos a nombres legibles
     const miscAll = await this.miscellaneousRepository.find();
@@ -187,31 +161,22 @@ export class ReportsService {
 
     // ✅ Resolver IDs de operadores a nombres completos
     const operadores = await this.userRepository.find();
-    console.log('👥 [ReportsService] Total operadores encontrados:', operadores.length);
-    
     const operadorMap = new Map<string, string>();
     operadores.forEach(u => {
       const userId = u._id?.toString();
       if (!userId) return;
-
       const nombreCompleto = [
-        (u as any).primerNombre, 
-        (u as any).segundoNombre, 
-        (u as any).primerApellido, 
-        (u as any).segundoApellido
+        (u as any).primerNombre, (u as any).segundoNombre, (u as any).primerApellido, (u as any).segundoApellido
       ].filter(Boolean).join(' ').trim() || (u as any).nombre || (u as any).username || (u as any).email || 'Usuario Desconocido';
-      
       operadorMap.set(userId, nombreCompleto);
     });
 
-    // ✅ Función auxiliar segura para extraer el ID como string
     const getIdString = (val: any): string => {
       if (!val) return '';
       if (typeof val === 'object' && val.toString) return val.toString().trim();
       return String(val).trim();
     };
 
-    // ✅ Construir detalle de tickets usando los campos CORRECTOS de la BD
     const ticketsDetalle = tickets.map(t => {
       const opRespId = getIdString((t as any).operatorResponsable || t.operador);
       const opAsigId = getIdString((t as any).operatorAsignado);
@@ -225,12 +190,9 @@ export class ReportsService {
         estado: (t as any).estado || '',
         horaInicioFalla: (t as any).horaInicioFalla || t.createdAt,
         horaCierre: (t as any).horaCierreFalla || (t as any).horaCierre || (t as any).closedAt || t.updatedAt,
-        duracion: t.mttrTotal
-          ? `${Math.floor(t.mttrTotal / 60)}h ${t.mttrTotal % 60}m`
-          : '0h 0m',
+        duracion: t.mttrTotal ? `${Math.floor(t.mttrTotal / 60)}h ${t.mttrTotal % 60}m` : '0h 0m',
         causaRaiz: miscMap.get(String((t as any).causaRaiz)) || (t as any).causaRaiz || '',
         solucionCaso: miscMap.get(String((t as any).SolucionCaso)) || (t as any).SolucionCaso || '',
-        
         operadorResponsable: operadorMap.get(opRespId) || (opRespId ? `ID: ${opRespId}` : 'N/A'),
         operadorAsignado: opAsigId ? (operadorMap.get(opAsigId) || `ID: ${opAsigId}`) : '',
       };
@@ -249,18 +211,18 @@ export class ReportsService {
         { title: 'Incidencias Puntuales', value: `${incidentesPorTipo.PUNTUAL}`, color: '#42f5a8', subtitle: 'Tipo: Puntual' },
         { title: 'Incidencias Masivas', value: `${incidentesPorTipo.MASIVA}`, color: '#f54242', subtitle: 'Tipo: Masiva' },
         { title: 'Ventana de Mantenimiento', value: `${incidentesPorTipo.MANTENIMIENTO}`, color: '#f5a842', subtitle: 'Tipo: Mantenimiento' },
-        { title: 'Total Tickets', value: `${totalTickets}`, color: '#f5a842', subtitle: 'Cerrados en el período' },
+        { title: 'Total Tickets', value: `${totalTickets}`, color: '#f5a842', subtitle: 'Totales en el período' },
         {
           title: 'MTTR Tiempo Medio Plataforma',
           value: mttrPlataformaFormateado,
           color: '#0288d1',
-          subtitle: `Basado en ${ticketsConMttrPlataforma.length} tickets`
+          subtitle: `Basado en ${ticketsConMttr.filter(t => t.networkCategory).length} tickets`
         },
         {
           title: 'MTTR Tiempo Medio Servicio',
           value: mttrServicioFormateado,
           color: '#7b1fa2',
-          subtitle: `Basado en ${ticketsConMttrServicio.length} tickets`
+          subtitle: `Basado en ${ticketsConMttr.filter(t => t.tipoCliente).length} tickets`
         },
       ],
       mttrPlataforma,
@@ -822,7 +784,7 @@ return {
   }
 
   private countByTipoIncidencia(tickets: any[]) {
-    const counts = { PUNTUAL: 0, MASIVA: 0, MANTENIMIENTO: 0 };
+    const counts = { PUNTUAL: 0, MASIVA: 0, MANTENIMIENTO: 0, SIN_CLASIFICAR: 0 };
 
     const normalize = (t: any): string => {
       const raw = t.incidentType || t.tipoIncidencia || '';
@@ -830,23 +792,37 @@ return {
       return (value || '').toString().toUpperCase().trim();
     };
 
+    // Log para diagnóstico
     if (tickets.length > 0) {
-      const tiposUnicos = [...new Set(tickets.map(t => normalize(t) || 'SIN_TIPO'))];
-      console.log('🔍 [ReportsService] Tipos de incidencia únicos en BD:', tiposUnicos);
+      const tiposUnicos = [...new Set(tickets.map(t => normalize(t)))];
+      console.log('🔍 [countByTipoIncidencia] Tipos únicos encontrados:', tiposUnicos);
+      console.log('🔍 [countByTipoIncidencia] Total tickets a procesar:', tickets.length);
     }
 
     tickets.forEach(t => {
       const tipo = normalize(t);
+      
+      // ✅ Matching más preciso: buscar palabras clave específicas
       if (tipo.includes('MASIVA')) {
         counts.MASIVA++;
       } else if (tipo.includes('MANTENIMIENTO') || tipo.includes('VENTANA')) {
         counts.MANTENIMIENTO++;
-      } else if (tipo.includes('PUNTUAL') || tipo.includes('FALLA')) {
+      } else if (tipo.includes('PUNTUAL')) {
         counts.PUNTUAL++;
+      } else if (tipo.includes('FALLA')) {
+        // Si dice "FALLA" pero no es MASIVA ni PUNTUAL, asumir PUNTUAL
+        counts.PUNTUAL++;
+      } else {
+        counts.SIN_CLASIFICAR++;
+        console.log('⚠️ [countByTipoIncidencia] Ticket sin clasificar:', {
+          caseNumber: t.caseNumber,
+          incidentType: t.incidentType,
+          tipoIncidencia: t.tipoIncidencia
+        });
       }
     });
 
-    console.log('📊 [ReportsService] Conteo final por tipo:', counts);
+    console.log('📊 [countByTipoIncidencia] Conteo final:', counts);
     return counts;
   }
 
