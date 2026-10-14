@@ -155,67 +155,31 @@ async notifyLoginSummary(userId: string) {
   }
 
   @Cron('*/10 * * * *') // Cada 10 minutos
-  async checkAndNotifyStaleTickets() {
-    this.logger.log('🔍 [CRON] Iniciando verificación de tickets...');
+ async checkAndNotifyStaleTickets() {
+  this.logger.log('🔍 [CRON] Iniciando verificación de tickets...');
 
-    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
+  
+  // 1️⃣ Obtener tickets sin asignar por 4 horas
+  const unassignedStaleTickets = await this.ticketsService.findUnassignedStaleTickets(fourHoursAgo);
+  
+  for (const ticket of unassignedStaleTickets) {
+    // ✅ PASAR EL RESPONSABLE PARA EXCLUIRLO
+    const assignedOperator = await this.ticketsService.getLeastLoadedOperator(ticket.operatorResponsable);
+    
+    if (assignedOperator) {
+      await this.ticketsService.updateTicket(ticket._id.toString(), {
+        operatorAsignado: assignedOperator._id.toString(),
+      } as any);
 
-    try {
-      // 1️⃣ TICKETS SIN ASIGNAR POR 4 HORAS → Asignar automáticamente
-      const unassignedStaleTickets = await this.ticketsService.findUnassignedStaleTickets(fourHoursAgo);
+      // ... (aquí va tu lógica de notificación) ...
       
-      for (const ticket of unassignedStaleTickets) {
-        const assignedOperator = await this.ticketsService.getLeastLoadedOperator();
-        
-        if (assignedOperator) {
-          await this.ticketsService.updateTicket(ticket._id.toString(), {
-            operatorAsignado: assignedOperator._id.toString(),
-          } as any);
-
-          await this.createNotification({
-            userId: assignedOperator._id.toString(),
-            title: '🎫 Ticket asignado automáticamente',
-            message: `Se te asignó el ticket ${ticket.caseNumber} por inactividad de 4+ horas.`,
-            type: 'ticket_auto_assignment',
-            ticketId: ticket._id.toString(),
-            ticketNumber: ticket.caseNumber,
-          });
-
-          this.logger.log(`✅ Ticket ${ticket.caseNumber} asignado automáticamente a ${assignedOperator.email}`);
-        }
-      }
-
-      // 2️⃣ TICKETS ASIGNADOS SIN ACTUALIZAR POR 2 HORAS → Alerta a todos los activos
-      const delayedTickets = await this.ticketsService.findDelayedTickets(twoHoursAgo);
-      
-      for (const ticket of delayedTickets) {
-        const existingAlert = await this.notificationRepository.findOne({
-          where: {
-            ticketId: ticket._id.toString(),
-            type: 'ticket_delay_alert',
-            createdAt: { $gte: twoHoursAgo }
-          }
-        } as any);
-
-        if (!existingAlert) {
-          await this.notifyActiveUsers({
-            title: '⚠️ Ticket sin actualizar',
-            message: `El ticket ${ticket.caseNumber} lleva más de 2 horas sin actualización`,
-            type: 'ticket_delay_alert',
-            ticketId: ticket._id.toString(),
-            ticketNumber: ticket.caseNumber,
-          });
-          this.logger.log(`⚠️ Alerta enviada por ticket ${ticket.caseNumber}`);
-        }
-      }
-
-      this.logger.log(`✅ [CRON] Verificación completada`);
-
-    } catch (error) {
-      this.logger.error('❌ Error en CRON de tickets:', error);
+      this.logger.log(`✅ Ticket ${ticket.caseNumber} asignado automáticamente a ${assignedOperator.email}`);
+    } else {
+      this.logger.warn(`⚠️ No se pudo asignar el ticket ${ticket.caseNumber}: No hay operadores disponibles distintos al responsable.`);
     }
   }
+}
 
   private async assignTicketAutomatically(ticket: any): Promise<any> {
     return null;

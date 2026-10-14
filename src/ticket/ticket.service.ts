@@ -350,7 +350,7 @@ async findAllPaginated(
     };
   }
 
-  async updateTicket(
+ /* async updateTicket(
     id: string,
     updateTicketDto: UpdateTicketDto,
     req?: Request,
@@ -441,6 +441,42 @@ async findAllPaginated(
     }
 
     return updatedTicket;
+  }*/
+  async updateTicket(
+    id: string,
+    updateTicketDto: UpdateTicketDto,
+    req?: Request,
+  ): Promise<Ticket> {
+    let objectId: ObjectId;
+    try {
+      objectId = new ObjectId(id);
+    } catch {
+      throw new BadRequestException('ID inválido');
+    }
+
+    const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
+    if (!oldTicket) {
+      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
+    }
+
+    // ... [Tus validaciones de negocio aquí] ...
+
+    const updateData = Object.fromEntries(
+      Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
+    );
+    updateData.updatedAt = new Date();
+
+    // ✅ SOLO ACTUALIZA, NO AUDITA (El interceptor se encarga de eso)
+    const result = await this.ticketRepository.updateOne(
+      { _id: objectId },
+      { $set: updateData },
+    );
+
+    if (result.matchedCount === 0) {
+      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
+    }
+
+    return this.findTicketById(id);
   }
 
   async closeTicket(id: string, updateDto?: any, req?: Request): Promise<Ticket> {
@@ -560,6 +596,7 @@ async findAllPaginated(
     );
 
     if (req) {
+      
       await this.createAuditLog(
         id,
         'TICKET',
@@ -573,39 +610,54 @@ async findAllPaginated(
     }
 
     return this.findTicketById(id);
+    
   }
 
-  private async createAuditLog(
-    recordId: string,
-    moduleId: string,
-    action: string,
-    user: any,
-    oldValue: any,
-    newValue: any,
-    req: Request,
-    details: string,
-  ) {
-    try {
-      const rawUserId = user?.sub ?? user?._id;
-      const userEmail = user?.email ?? user?.userEmail;
-      const auditData = {
-        userId: rawUserId ? this.safeObjectId(rawUserId) : undefined,
-        userEmail: userEmail || undefined,
-        action,
-        moduleId,
-        oldValue: oldValue ? JSON.stringify(oldValue) : undefined,
-        newValue: newValue ? JSON.stringify(newValue) : undefined,
-        ipAddress: getClientIp(req),
-        recordId,
-        eventDate: new Date(),
-        details,
-      };
-      const auditLog = this.auditLogRepository.create(auditData);
-      await this.auditLogRepository.save(auditLog);
-    } catch (error) {
-      console.error('❌ Error creando log de auditoría:', error);
-    }
+private async createAuditLog(
+  recordId: string,
+  moduleId: string,
+  action: string,
+  user: any,
+  oldValue: any,
+  newValue: any,
+  req: Request,
+  details: string,
+) {
+  try {
+    const rawUserId = user?.sub ?? user?._id;
+    const userEmail = user?.email ?? user?.userEmail;
+    
+    // 🔍 DEBUG: Verificar qué llega
+    this.logger.log(`📝 [createAuditLog] oldValue type: ${typeof oldValue}, isArray: ${Array.isArray(oldValue)}`);
+    this.logger.log(`📝 [createAuditLog] oldValue keys: ${oldValue ? Object.keys(oldValue).length : 0}`);
+    
+    
+    const auditData = {
+      userId: rawUserId ? this.safeObjectId(rawUserId) : undefined,
+      userEmail: userEmail || undefined,
+      action,
+      moduleId,
+      // ✅ CAMBIO: Verificar si es un objeto con propiedades, no solo si es truthy
+      oldValue: (oldValue && typeof oldValue === 'object' && Object.keys(oldValue).length > 0)
+        ? JSON.stringify(oldValue)
+        : undefined,
+      newValue: (newValue && typeof newValue === 'object' && Object.keys(newValue).length > 0)
+        ? JSON.stringify(newValue)
+        : undefined,
+      ipAddress: getClientIp(req),
+      recordId,
+      eventDate: new Date(),
+      details,
+    };
+    
+    const auditLog = this.auditLogRepository.create(auditData);
+    await this.auditLogRepository.save(auditLog);
+    
+    this.logger.log(`✅ [createAuditLog] Auditoría guardada. oldValue guardado: ${!!auditData.oldValue}`);
+  } catch (error) {
+    console.error('❌ Error creando log de auditoría:', error);
   }
+}
 
   private safeObjectId(id: any): ObjectId | undefined {
     if (!id) return undefined;
@@ -836,55 +888,59 @@ async findAllPaginated(
 
   // ✅ 2. Obtener el operador activo con menos tickets en gestión
   // ✅ Obtener el operador ONLINE con menos tickets en gestión
-  async getLeastLoadedOperator() {
-    // 1. Obtener IDs de usuarios activos (online en los últimos 10 min)
-    const activeUserIds = await this.userSessionsService.getActiveUserIds();
+// ✅ Actualiza este método en tu TicketService
+async getLeastLoadedOperator(excludeUserId?: string) {
+  // 1. Obtener IDs de usuarios activos (online en los últimos 10 min)
+  const activeUserIds = await this.userSessionsService.getActiveUserIds();
 
-    if (activeUserIds.length === 0) {
-      this.logger?.warn('⚠️ No hay usuarios online disponibles para asignación');
-      return null;
-    }
+  // 2. Excluir al operador responsable de la lista de candidatos
+  const candidateUserIds = excludeUserId 
+    ? activeUserIds.filter(id => id !== String(excludeUserId))
+    : activeUserIds;
 
-    // 2. Contar tickets activos por operador (solo para los online)
-    const counts = await this.ticketRepository.aggregate([
-      {
-        $match: {
-          status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } },
-          operatorAsignado: { $in: activeUserIds } // Solo contar para usuarios online
-        }
-      },
-      { $group: { _id: '$operatorAsignado', activeTickets: { $sum: 1 } } }
-    ]).toArray();
-
-    // 3. Obtener los datos completos de los usuarios online
-    const allUsers = await this.usersService.findAll({ isActive: true });
-
-    // Filtrar solo los que están online y tienen rol válido
-    const onlineOperators = allUsers.filter(u =>
-      activeUserIds.includes(u._id.toString()) &&
-      (u.role === 'operador' || u.role === 'admin' || u.role === 'editor')
-    );
-
-    if (onlineOperators.length === 0) {
-      this.logger?.warn('⚠️ No hay operadores online disponibles');
-      return null;
-    }
-
-    // 4. Asignar la carga a cada operador online
-    const operatorsWithLoad = onlineOperators.map(op => {
-      const countData = counts.find(c => c._id === op._id.toString());
-      return {
-        user: op,
-        load: countData ? countData.activeTickets : 0
-      };
-    });
-
-    // 5. Ordenar por carga ascendente y devolver el que tenga menos
-    operatorsWithLoad.sort((a, b) => a.load - b.load);
-
-    const selected = operatorsWithLoad[0].user;
-    this.logger?.log(`✅ Operador seleccionado: ${selected.email} con ${operatorsWithLoad[0].load} tickets activos`);
-
-    return selected;
+  if (candidateUserIds.length === 0) {
+    this.logger.warn('⚠️ No hay otros operadores online disponibles para asignación (excluyendo al responsable)');
+    return null;
   }
+
+  // 3. Contar tickets activos SOLO para los candidatos restantes
+  const counts = await this.ticketRepository.aggregate([
+    {
+      $match: {
+        status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } },
+        operatorAsignado: { $in: candidateUserIds }
+      }
+    },
+    { $group: { _id: '$operatorAsignado', activeTickets: { $sum: 1 } } }
+  ]).toArray();
+
+  // 4. Obtener datos de los usuarios candidatos
+  const allUsers = await this.usersService.findAll({ isActive: true });
+  const onlineOperators = allUsers.filter(u =>
+    candidateUserIds.includes(u._id.toString()) &&
+    (u.role === 'operador' || u.role === 'admin' || u.role === 'editor')
+  );
+
+  if (onlineOperators.length === 0) {
+    this.logger.warn('⚠️ No hay operadores online con roles válidos disponibles');
+    return null;
+    }
+
+  // 5. Asignar la carga a cada operador online
+  const operatorsWithLoad = onlineOperators.map(op => {
+    const countData = counts.find(c => c._id === op._id.toString());
+    return {
+      user: op,
+      load: countData ? countData.activeTickets : 0
+    };
+  });
+
+  // 6. Ordenar por carga ascendente
+  operatorsWithLoad.sort((a, b) => a.load - b.load);
+
+  const selected = operatorsWithLoad[0].user;
+  this.logger.log(`✅ Operador seleccionado: ${selected.email} con ${operatorsWithLoad[0].load} tickets activos`);
+
+  return selected;
+}
 }
