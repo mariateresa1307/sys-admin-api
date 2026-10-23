@@ -117,28 +117,20 @@ export class TicketController {
   }
 
   @Put(':id/close')
-  async closeTicket(
-    @Param('id') id: string,
-    @Req() req: Request,
-  ) {
-    // Nota: Si también quieres auditoría al cerrar, aplica la misma lógica aquí
-    const oldTicket = await this.ticketService.findTicketById(id);
-    (req as any).oldValue = oldTicket;
-    (req as any).newValue = { status: 'CERRADO' };
-    
-    return this.ticketService.closeTicket(id, undefined, req);
-  }
+  @UseInterceptors(AuditInterceptor)
+async closeTicket(@Param('id') id: string, @Req() req: Request, @Body() updateDto?: any) {
+  const oldTicket = await this.ticketService.findTicketById(id);
+  (req as any).oldValue = oldTicket;
+  (req as any).newValue = { status: 'CERRADO' };
+  return this.ticketService.closeTicket(id, updateDto, req);
+}
 
   @Put(':id/reopen')
-  async reopenTicket(
-    @Param('id') id: string,
-    @Req() req: Request,
-  ) {
-    // Nota: Si también quieres auditoría al reabrir, aplica la misma lógica aquí
-    const oldTicket = await this.ticketService.findTicketById(id);
-    (req as any).oldValue = oldTicket;
-    (req as any).newValue = { status: 'ACTIVO' };
-    
-    return this.ticketService.reopenTicket(id, req);
-  }
+  @UseInterceptors(AuditInterceptor)
+async reopenTicket(@Param('id') id: string, @Req() req: Request) {
+  const oldTicket = await this.ticketService.findTicketById(id);
+  (req as any).oldValue = oldTicket;
+  (req as any).newValue = { status: 'ACTIVO' };
+  return this.ticketService.reopenTicket(id, req);
+}
 }

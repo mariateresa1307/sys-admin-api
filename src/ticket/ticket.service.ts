@@ -350,98 +350,7 @@ async findAllPaginated(
     };
   }
 
- /* async updateTicket(
-    id: string,
-    updateTicketDto: UpdateTicketDto,
-    req?: Request,
-  ): Promise<Ticket> {
-    let objectId: ObjectId;
-    try {
-      objectId = new ObjectId(id);
-    } catch {
-      throw new BadRequestException('ID inválido');
-    }
-
-    // ✅ OBTENER EL TICKET ANTES DE VALIDAR PARA CONOCER SU ESTADO ACTUAL EN BD
-    const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
-    const nuevoResponsable = updateTicketDto.operatorResponsable || oldTicket?.operatorResponsable;
-    const nuevoAsignado = updateTicketDto.operatorAsignado || oldTicket?.operatorAsignado;
-    if (nuevoAsignado && nuevoResponsable && nuevoAsignado === nuevoResponsable) {
-      throw new BadRequestException('El operador asignado no puede ser el mismo que el operador responsable.');
-    }
-    // ✅ VALIDACIÓN INTELIGENTE: Solo exigir campos de cierre si REALMENTE se está cerrando AHORA
-    // Es decir: el nuevo estado es CERRADO Y el estado anterior NO era CERRADO
-    const isClosingNow =
-      (updateTicketDto.status === 'CERRADO' || updateTicketDto.status === 'cerrado') &&
-      (oldTicket?.status !== 'CERRADO' && oldTicket?.status !== 'cerrado');
-
-    if (isClosingNow) {
-      if (!updateTicketDto.escaladoPor || updateTicketDto.escaladoPor.trim() === '' ||
-        !updateTicketDto.imputable || updateTicketDto.imputable.trim() === '') {
-        throw new BadRequestException('No se puede cerrar el ticket: Los campos "Escalado por" e "Imputable a" son obligatorios.');
-      }
-    }
-
-    const updateData = Object.fromEntries(
-      Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
-    );
-
-    if (updateTicketDto.operatorAsignado && updateTicketDto.operatorAsignado !== oldTicket?.operatorAsignado) {
-      updateData.fechaAsignacionOpA = new Date().toISOString();
-    }
-    updateData.updatedAt = new Date();
-
-    const result = await this.ticketRepository.updateOne(
-      { _id: objectId },
-      { $set: updateData },
-    );
-
-    if (result.matchedCount === 0) {
-      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
-    }
-
-    const updatedTicket = await this.findTicketById(id);
-
-    // ✅ CREAR AUDITORÍA DIRECTAMENTE
-    if (updateTicketDto.operatorAsignado || updateTicketDto.operatorResponsable) {
-      const changes = [];
-      const oldValue: any = {};
-      const newValue: any = {};
-
-      if (updateTicketDto.operatorAsignado && updateTicketDto.operatorAsignado !== oldTicket?.operatorAsignado) {
-        changes.push(`Operador asignado cambiado de '${oldTicket?.operatorAsignado || 'N/A'}' a '${updateTicketDto.operatorAsignado}'`);
-        oldValue.operatorAsignado = oldTicket?.operatorAsignado || 'N/A';
-        newValue.operatorAsignado = updateTicketDto.operatorAsignado;
-      }
-
-      if (updateTicketDto.operatorResponsable && updateTicketDto.operatorResponsable !== oldTicket?.operatorResponsable) {
-        changes.push(`Operador responsable cambiado de '${oldTicket?.operatorResponsable || 'N/A'}' a '${updateTicketDto.operatorResponsable}'`);
-        oldValue.operatorResponsable = oldTicket?.operatorResponsable || 'N/A';
-        newValue.operatorResponsable = updateTicketDto.operatorResponsable;
-      }
-
-      if (changes.length > 0) {
-        const userData = req ? (req as any).user : null;
-        const userEmail = userData?.email || 'SYSTEM (Automático)';
-        const userId = userData?.sub || userData?._id || 'SYSTEM';
-
-        await this.createAuditLog(
-          id,
-          'TICKET',
-          'UPDATE',
-          { email: userEmail, sub: userId },
-          oldValue,
-          newValue,
-          req || {} as Request,
-          `Asignación de operador: ${changes.join(', ')}`
-        );
-
-        this.logger.log(`✅ Auditoría creada: ${changes.join(', ')}`);
-      }
-    }
-
-    return updatedTicket;
-  }*/
+ 
   async updateTicket(
     id: string,
     updateTicketDto: UpdateTicketDto,
@@ -546,21 +455,7 @@ async findAllPaginated(
       { $set: updateData },
     );
 
-    if (req) {
-      const userData = (req as any).user;
-      await this.notificationsService.notifyTicketClosure(ticket, userData?._id?.toString() || 'SYSTEM');
 
-      await this.createAuditLog(
-        id,
-        'TICKET',
-        'UPDATE',
-        userData,
-        { status: ticket.status },
-        { status: TICKET_STATUS.CERRADO, horaCierreFalla: horaCierre },
-        req,
-        `Ticket ${ticket.caseNumber} cerrado`,
-      );
-    }
 
     return this.findTicketById(id);
   }
@@ -595,25 +490,13 @@ async findAllPaginated(
       { $set: updateData },
     );
 
-    if (req) {
-      
-      await this.createAuditLog(
-        id,
-        'TICKET',
-        'UPDATE',
-        userData,
-        { status: ticket.status },
-        { status: TICKET_STATUS.ACTIVO },
-        req,
-        `Ticket ${ticket.caseNumber} reabierto por admin ${userData?.userEmail || 'usuario'}`,
-      );
-    }
+
 
     return this.findTicketById(id);
     
   }
 
-private async createAuditLog(
+/*private async createAuditLog(
   recordId: string,
   moduleId: string,
   action: string,
@@ -657,7 +540,7 @@ private async createAuditLog(
   } catch (error) {
     console.error('❌ Error creando log de auditoría:', error);
   }
-}
+}*/
 
   private safeObjectId(id: any): ObjectId | undefined {
     if (!id) return undefined;

@@ -15,7 +15,6 @@ import { Ticket } from './ticket/entities/ticket.entity';
 import { MiscellaneousModule } from './miscellaneous/miscellaneous.module';
 import { Miscellaneous } from './miscellaneous/entities/miscellaneous.entity';
 import { ReportsModule } from './reports/reports.module';
-import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
 import { JwtModule } from '@nestjs/jwt';
 import { UserSessionsModule } from './userSessions/userSessions.module';
@@ -55,10 +54,7 @@ import { Notification } from './notifications/entities/notification.entity';
   controllers: [AppController],
   providers: [
     AppService,
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: AuditInterceptor,
-    },
+  
   ],
 })
 export class AppModule {}

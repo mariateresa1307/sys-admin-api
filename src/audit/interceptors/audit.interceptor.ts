@@ -22,7 +22,7 @@ export class AuditInterceptor implements NestInterceptor {
     const controller = context.getClass().name;
     const handler = context.getHandler().name;
 
-      if (controller === 'UserSessionsController' || controller === 'NotificationsController' || url.startsWith('/notifications')) {
+    if (controller === 'UserSessionsController' || controller === 'NotificationsController' || url.startsWith('/notifications')) {
       return next.handle();
     }
     const module = this.extractModule(controller);
@@ -36,10 +36,10 @@ export class AuditInterceptor implements NestInterceptor {
     let userEmail = user?.email;
     let userId = user?.sub || user?._id;
 
-if ((isLogin || isLogout || isPasswordChange) && !userEmail) {
+    if ((isLogin || isLogout || isPasswordChange) && !userEmail) {
       userEmail = body?.email;
     }
-if ((isLogin || isLogout) && !userEmail) {
+    if ((isLogin || isLogout) && !userEmail) {
       userEmail = body?.email;
     }
 
@@ -57,7 +57,7 @@ if ((isLogin || isLogout) && !userEmail) {
         console.warn('⚠️ [AuditInterceptor] Error extrayendo del token:', message);
       }
     }
-     
+
     return next.handle().pipe(
       tap(async (response) => {
         try {
@@ -79,19 +79,20 @@ if ((isLogin || isLogout) && !userEmail) {
             let detailsMessage = '';
             let recordIdToSave = params?.id;
 
-             if (isLogout) {
+            if (isLogout) {
               detailsMessage = `Logout de usuario ${userEmail || 'desconocido'}`;
             } else if (isLogin) {
               detailsMessage = `Login de usuario ${userEmail || 'desconocido'}`;
             } else if (isPasswordChange) {
               detailsMessage = `Cambio de contraseña para usuario ${userEmail || 'desconocido'}`;
             } else if (isUpdate && (module === 'TICKET' || module === 'TICKETS') && oldValue) {
-              
-              const caseNum = oldValue.caseNumber || 'S/N';
-              const subj = oldValue.subject || 'Sin asunto';
 
-              detailsMessage = `Actualización en TICKET: ${caseNum} - ${subj}`;
+              const caseNum = oldValue.caseNumber || 'S/N';
+              const newSubj = body?.subject || oldValue.subject || 'Sin asunto';
+
+              detailsMessage = `Actualización en Ticket: ${caseNum} - ${newSubj}`;
               recordIdToSave = caseNum;
+
 
             } else if (isUpdate && (module === 'USER' || module === 'USERS') && oldValue) {
 
@@ -143,7 +144,7 @@ if ((isLogin || isLogout) && !userEmail) {
           this.logger.error('Error creating audit log', error);
         }
       }),
- catchError((error) => {
+      catchError((error) => {
         if (isLogin) {
           const attemptedEmail = body?.email || 'desconocido';
 
@@ -158,7 +159,7 @@ if ((isLogin || isLogout) && !userEmail) {
               details: `Intento de login fallido: ${attemptedEmail}`,
             } as any)
             .catch((e) => this.logger.error('Error logging failed login', e));
-        }else if (isPasswordChange) {
+        } else if (isPasswordChange) {
           this.auditService.createLog({
             userId: userId?.toString() || 'SYSTEM',
             userEmail: userEmail || 'anonymous',
