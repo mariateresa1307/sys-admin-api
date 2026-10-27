@@ -350,6 +350,7 @@ async findAllPaginated(
     };
   }
 
+<<<<<<< HEAD
  
   async updateTicket(
     id: string,
@@ -362,31 +363,25 @@ async findAllPaginated(
     } catch {
       throw new BadRequestException('ID inválido');
     }
+=======
+  
+  async updateTicket(id: string, updateTicketDto: UpdateTicketDto, req?: Request): Promise<Ticket> {
+    let objectId: ObjectId;
+    try { objectId = new ObjectId(id); } catch { throw new BadRequestException('ID inválido'); }
+>>>>>>> 8c37972daa6400b85885bcb97dbe99abdf1ed005
 
     const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
-    if (!oldTicket) {
-      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
-    }
+    if (!oldTicket) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
 
-    // ... [Tus validaciones de negocio aquí] ...
-
-    const updateData = Object.fromEntries(
-      Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
-    );
+    const updateData = Object.fromEntries(Object.entries(updateTicketDto).filter(([, value]) => value !== undefined));
     updateData.updatedAt = new Date();
 
-    // ✅ SOLO ACTUALIZA, NO AUDITA (El interceptor se encarga de eso)
-    const result = await this.ticketRepository.updateOne(
-      { _id: objectId },
-      { $set: updateData },
-    );
-
-    if (result.matchedCount === 0) {
-      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
-    }
+    const result = await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
+    if (result.matchedCount === 0) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
 
     return this.findTicketById(id);
   }
+
 
   async closeTicket(id: string, updateDto?: any, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
@@ -455,11 +450,21 @@ async findAllPaginated(
       { $set: updateData },
     );
 
+<<<<<<< HEAD
 
+=======
+    await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
+
+    if (req) {
+      const userData = (req as any).user;
+      await this.notificationsService.notifyTicketClosure(ticket, userData?._id?.toString() || 'SYSTEM');
+    }
+>>>>>>> 8c37972daa6400b85885bcb97dbe99abdf1ed005
 
     return this.findTicketById(id);
   }
 
+  
   // ✅ CORREGIDO: También actualiza updatedAt al reabrir
   async reopenTicket(id: string, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
@@ -480,22 +485,23 @@ async findAllPaginated(
       throw new ForbiddenException('Solo los administradores pueden reabrir tickets');
     }
 
-    const updateData = {
-      status: TICKET_STATUS.ACTIVO,
-      updatedAt: new Date(), // ✅ Fuerza la actualización de la fecha de modificación
-    };
+    const updateData = { status: TICKET_STATUS.ACTIVO, updatedAt: new Date() };
+    await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
 
+<<<<<<< HEAD
     await this.ticketRepository.updateOne(
       { _id: objectId },
       { $set: updateData },
     );
 
 
+=======
+>>>>>>> 8c37972daa6400b85885bcb97dbe99abdf1ed005
 
     return this.findTicketById(id);
-    
   }
 
+<<<<<<< HEAD
 /*private async createAuditLog(
   recordId: string,
   moduleId: string,
@@ -600,6 +606,8 @@ async findAllPaginated(
 
     return enriched;
   }
+=======
+>>>>>>> 8c37972daa6400b85885bcb97dbe99abdf1ed005
 
   async stats() {
     const startOfToday = new Date();
@@ -635,77 +643,42 @@ async findAllPaginated(
     };
   }
 
-  // ✅ REPORTE: incidencias por servicio con agregación en MongoDB (server-side)
   async getReporteIncidencias(mes: string, tipoServicio?: string) {
-    // Rango del mes: [inicio, inicio del mes siguiente)
     const [year, month] = mes.split('-').map(Number);
     const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
     const end = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
 
     const pipeline: any[] = [
-      // 1️⃣ Solo tickets del mes seleccionado
       { $match: { createdAt: { $gte: start, $lt: end } } },
-
-      // 2️⃣ Un documento por cada servicio afectado (desenrolla el array)
       { $unwind: '$serviciosAfectados' },
-
-      // 3️⃣ Convertir el string a ObjectId de forma segura (inválidos → null)
-      {
-        $addFields: {
-          servicioIdObj: {
-            $convert: { input: '$serviciosAfectados', to: 'objectId', onError: null, onNull: null },
-          },
-        },
-      },
+      { $addFields: { servicioIdObj: { $convert: { input: '$serviciosAfectados', to: 'objectId', onError: null, onNull: null } } } },
       { $match: { servicioIdObj: { $ne: null } } },
-
-      // 4️⃣ Join con servicios para obtener tipo y campos técnicos
-      {
-        $lookup: {
-          from: 'services',
-          localField: 'servicioIdObj',
-          foreignField: '_id',
-          as: 'servicioDoc',
-        },
-      },
+      { $lookup: { from: 'services', localField: 'servicioIdObj', foreignField: '_id', as: 'servicioDoc' } },
       { $unwind: { path: '$servicioDoc', preserveNullAndEmptyArrays: false } },
     ];
 
-    // 5️⃣ Filtro opcional por tipo de servicio (aplicado en servidor)
-    if (tipoServicio) {
-      pipeline.push({ $match: { 'servicioDoc.tipoServicio': tipoServicio } });
-    }
+    if (tipoServicio) pipeline.push({ $match: { 'servicioDoc.tipoServicio': tipoServicio } });
 
-    // 6️⃣ Agrupación por servicio con todas las métricas que necesita el frontend
     pipeline.push(
       {
         $group: {
           _id: '$servicioDoc._id',
           tipoServicio: { $first: { $ifNull: ['$servicioDoc.tipoServicio', 'N/A'] } },
-          servicioNombre: {
-            $first: { $ifNull: ['$servicioDoc.name', { $ifNull: ['$servicioDoc.id_circuito', 'Servicio desconocido'] }] },
-          },
+          servicioNombre: { $first: { $ifNull: ['$servicioDoc.name', { $ifNull: ['$servicioDoc.id_circuito', 'Servicio desconocido'] }] } },
           id_circuito: { $first: '$servicioDoc.id_circuito' },
           id_netuno: { $first: '$servicioDoc.id_netuno' },
           contrato: { $first: '$servicioDoc.contrato' },
           ultimaMilla: { $first: '$servicioDoc.ultimaMilla' },
           proveedorDelServicioCompartido: { $first: '$servicioDoc.proveedorDelServicioCompartido' },
           totalIncidencias: { $sum: 1 },
-          abiertas: {
-            $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'cerrado'] }, 0, 1] },
-          },
-          cerradas: {
-            $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'cerrado'] }, 1, 0] },
-          },
+          abiertas: { $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'cerrado'] }, 0, 1] } },
+          cerradas: { $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'cerrado'] }, 1, 0] } },
           ultimaIncidencia: { $max: '$createdAt' },
           tickets: {
             $push: {
-              _id: { $toString: '$_id' },
-              caseNumber: { $ifNull: ['$caseNumber', 'S/N'] },
-              subject: { $ifNull: ['$subject', 'Sin asunto'] },
-              status: { $ifNull: ['$status', 'N/A'] },
-              createdAt: '$createdAt',
-              incidentType: { $ifNull: ['$incidentType', 'Sin Clasificar'] },
+              _id: { $toString: '$_id' }, caseNumber: { $ifNull: ['$caseNumber', 'S/N'] },
+              subject: { $ifNull: ['$subject', 'Sin asunto'] }, status: { $ifNull: ['$status', 'N/A'] },
+              createdAt: '$createdAt', incidentType: { $ifNull: ['$incidentType', 'Sin Clasificar'] },
             },
           },
         },
@@ -714,64 +687,36 @@ async findAllPaginated(
     );
 
     const servicios = await this.ticketRepository.aggregate(pipeline).toArray();
-
-    // Totales ligeros (sobre el resultado ya agregado, no sobre la colección completa)
-    const totales = servicios.reduce(
-      (acc: any, s: any) => ({
-        total: acc.total + s.totalIncidencias,
-        abiertas: acc.abiertas + s.abiertas,
-        cerradas: acc.cerradas + s.cerradas,
-        servicios: acc.servicios + 1,
-      }),
-      { total: 0, abiertas: 0, cerradas: 0, servicios: 0 },
-    );
+    const totales = servicios.reduce((acc: any, s: any) => ({
+      total: acc.total + s.totalIncidencias, abiertas: acc.abiertas + s.abiertas,
+      cerradas: acc.cerradas + s.cerradas, servicios: acc.servicios + 1,
+    }), { total: 0, abiertas: 0, cerradas: 0, servicios: 0 });
 
     return { servicios, totales };
   }
 
-  async findStaleTickets(beforeDate: Date) {
-    return await this.ticketRepository.find({
-      where: {
-        updatedAt: { $lte: beforeDate },
-        status: {
-          $not: { $regex: /cerrado|closed|resuelto|cancelado/i }
-        },
 
-      },
-    });
+  async findStaleTickets(beforeDate: Date) {
+    return await this.ticketRepository.find({ where: { updatedAt: { $lte: beforeDate }, status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } } } });
   }
 
   async findDelayedTickets(beforeDate: Date) {
-    return await this.ticketRepository.find({
-      where: {
-        updatedAt: { $lte: beforeDate },
-        operatorAsignado: { $exists: true },
-        status: {
-          $not: { $regex: /cerrado|closed|resuelto|cancelado/i }
-        },
-      },
-    });
+    return await this.ticketRepository.find({ where: { updatedAt: { $lte: beforeDate }, operatorAsignado: { $exists: true }, status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } } } });
   }
 
 
-  // ✅ 1. Buscar tickets sin actualizar por 4h Y SIN operador asignado
+
   async findUnassignedStaleTickets(beforeDate: Date) {
     return await this.ticketRepository.find({
       where: {
         updatedAt: { $lte: beforeDate },
         status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } },
-        $or: [
-          { operatorAsignado: { $exists: false } },
-          { operatorAsignado: null },
-          { operatorAsignado: '' }
-        ]
-      },
+        $or: [{ operatorAsignado: { $exists: false } }, { operatorAsignado: null }, { operatorAsignado: '' }]
+      }
     } as any);
   }
 
-  // ✅ 2. Obtener el operador activo con menos tickets en gestión
-  // ✅ Obtener el operador ONLINE con menos tickets en gestión
-// ✅ Actualiza este método en tu TicketService
+ 
 async getLeastLoadedOperator(excludeUserId?: string) {
   // 1. Obtener IDs de usuarios activos (online en los últimos 10 min)
   const activeUserIds = await this.userSessionsService.getActiveUserIds();
