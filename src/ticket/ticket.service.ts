@@ -350,134 +350,23 @@ async findAllPaginated(
     };
   }
 
- /* async updateTicket(
-    id: string,
-    updateTicketDto: UpdateTicketDto,
-    req?: Request,
-  ): Promise<Ticket> {
+  
+  async updateTicket(id: string, updateTicketDto: UpdateTicketDto, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
-    try {
-      objectId = new ObjectId(id);
-    } catch {
-      throw new BadRequestException('ID inválido');
-    }
-
-    // ✅ OBTENER EL TICKET ANTES DE VALIDAR PARA CONOCER SU ESTADO ACTUAL EN BD
-    const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
-    const nuevoResponsable = updateTicketDto.operatorResponsable || oldTicket?.operatorResponsable;
-    const nuevoAsignado = updateTicketDto.operatorAsignado || oldTicket?.operatorAsignado;
-    if (nuevoAsignado && nuevoResponsable && nuevoAsignado === nuevoResponsable) {
-      throw new BadRequestException('El operador asignado no puede ser el mismo que el operador responsable.');
-    }
-    // ✅ VALIDACIÓN INTELIGENTE: Solo exigir campos de cierre si REALMENTE se está cerrando AHORA
-    // Es decir: el nuevo estado es CERRADO Y el estado anterior NO era CERRADO
-    const isClosingNow =
-      (updateTicketDto.status === 'CERRADO' || updateTicketDto.status === 'cerrado') &&
-      (oldTicket?.status !== 'CERRADO' && oldTicket?.status !== 'cerrado');
-
-    if (isClosingNow) {
-      if (!updateTicketDto.escaladoPor || updateTicketDto.escaladoPor.trim() === '' ||
-        !updateTicketDto.imputable || updateTicketDto.imputable.trim() === '') {
-        throw new BadRequestException('No se puede cerrar el ticket: Los campos "Escalado por" e "Imputable a" son obligatorios.');
-      }
-    }
-
-    const updateData = Object.fromEntries(
-      Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
-    );
-
-    if (updateTicketDto.operatorAsignado && updateTicketDto.operatorAsignado !== oldTicket?.operatorAsignado) {
-      updateData.fechaAsignacionOpA = new Date().toISOString();
-    }
-    updateData.updatedAt = new Date();
-
-    const result = await this.ticketRepository.updateOne(
-      { _id: objectId },
-      { $set: updateData },
-    );
-
-    if (result.matchedCount === 0) {
-      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
-    }
-
-    const updatedTicket = await this.findTicketById(id);
-
-    // ✅ CREAR AUDITORÍA DIRECTAMENTE
-    if (updateTicketDto.operatorAsignado || updateTicketDto.operatorResponsable) {
-      const changes = [];
-      const oldValue: any = {};
-      const newValue: any = {};
-
-      if (updateTicketDto.operatorAsignado && updateTicketDto.operatorAsignado !== oldTicket?.operatorAsignado) {
-        changes.push(`Operador asignado cambiado de '${oldTicket?.operatorAsignado || 'N/A'}' a '${updateTicketDto.operatorAsignado}'`);
-        oldValue.operatorAsignado = oldTicket?.operatorAsignado || 'N/A';
-        newValue.operatorAsignado = updateTicketDto.operatorAsignado;
-      }
-
-      if (updateTicketDto.operatorResponsable && updateTicketDto.operatorResponsable !== oldTicket?.operatorResponsable) {
-        changes.push(`Operador responsable cambiado de '${oldTicket?.operatorResponsable || 'N/A'}' a '${updateTicketDto.operatorResponsable}'`);
-        oldValue.operatorResponsable = oldTicket?.operatorResponsable || 'N/A';
-        newValue.operatorResponsable = updateTicketDto.operatorResponsable;
-      }
-
-      if (changes.length > 0) {
-        const userData = req ? (req as any).user : null;
-        const userEmail = userData?.email || 'SYSTEM (Automático)';
-        const userId = userData?.sub || userData?._id || 'SYSTEM';
-
-        await this.createAuditLog(
-          id,
-          'TICKET',
-          'UPDATE',
-          { email: userEmail, sub: userId },
-          oldValue,
-          newValue,
-          req || {} as Request,
-          `Asignación de operador: ${changes.join(', ')}`
-        );
-
-        this.logger.log(`✅ Auditoría creada: ${changes.join(', ')}`);
-      }
-    }
-
-    return updatedTicket;
-  }*/
-  async updateTicket(
-    id: string,
-    updateTicketDto: UpdateTicketDto,
-    req?: Request,
-  ): Promise<Ticket> {
-    let objectId: ObjectId;
-    try {
-      objectId = new ObjectId(id);
-    } catch {
-      throw new BadRequestException('ID inválido');
-    }
+    try { objectId = new ObjectId(id); } catch { throw new BadRequestException('ID inválido'); }
 
     const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
-    if (!oldTicket) {
-      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
-    }
+    if (!oldTicket) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
 
-    // ... [Tus validaciones de negocio aquí] ...
-
-    const updateData = Object.fromEntries(
-      Object.entries(updateTicketDto).filter(([, value]) => value !== undefined),
-    );
+    const updateData = Object.fromEntries(Object.entries(updateTicketDto).filter(([, value]) => value !== undefined));
     updateData.updatedAt = new Date();
 
-    // ✅ SOLO ACTUALIZA, NO AUDITA (El interceptor se encarga de eso)
-    const result = await this.ticketRepository.updateOne(
-      { _id: objectId },
-      { $set: updateData },
-    );
-
-    if (result.matchedCount === 0) {
-      throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
-    }
+    const result = await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
+    if (result.matchedCount === 0) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
 
     return this.findTicketById(id);
   }
+
 
   async closeTicket(id: string, updateDto?: any, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
@@ -546,25 +435,17 @@ async findAllPaginated(
       { $set: updateData },
     );
 
+    await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
+
     if (req) {
       const userData = (req as any).user;
       await this.notificationsService.notifyTicketClosure(ticket, userData?._id?.toString() || 'SYSTEM');
-
-      await this.createAuditLog(
-        id,
-        'TICKET',
-        'UPDATE',
-        userData,
-        { status: ticket.status },
-        { status: TICKET_STATUS.CERRADO, horaCierreFalla: horaCierre },
-        req,
-        `Ticket ${ticket.caseNumber} cerrado`,
-      );
     }
 
     return this.findTicketById(id);
   }
 
+  
   // ✅ CORREGIDO: También actualiza updatedAt al reabrir
   async reopenTicket(id: string, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
@@ -585,138 +466,13 @@ async findAllPaginated(
       throw new ForbiddenException('Solo los administradores pueden reabrir tickets');
     }
 
-    const updateData = {
-      status: TICKET_STATUS.ACTIVO,
-      updatedAt: new Date(), // ✅ Fuerza la actualización de la fecha de modificación
-    };
+    const updateData = { status: TICKET_STATUS.ACTIVO, updatedAt: new Date() };
+    await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
 
-    await this.ticketRepository.updateOne(
-      { _id: objectId },
-      { $set: updateData },
-    );
-
-    if (req) {
-      
-      await this.createAuditLog(
-        id,
-        'TICKET',
-        'UPDATE',
-        userData,
-        { status: ticket.status },
-        { status: TICKET_STATUS.ACTIVO },
-        req,
-        `Ticket ${ticket.caseNumber} reabierto por admin ${userData?.userEmail || 'usuario'}`,
-      );
-    }
 
     return this.findTicketById(id);
-    
   }
 
-private async createAuditLog(
-  recordId: string,
-  moduleId: string,
-  action: string,
-  user: any,
-  oldValue: any,
-  newValue: any,
-  req: Request,
-  details: string,
-) {
-  try {
-    const rawUserId = user?.sub ?? user?._id;
-    const userEmail = user?.email ?? user?.userEmail;
-    
-    // 🔍 DEBUG: Verificar qué llega
-    this.logger.log(`📝 [createAuditLog] oldValue type: ${typeof oldValue}, isArray: ${Array.isArray(oldValue)}`);
-    this.logger.log(`📝 [createAuditLog] oldValue keys: ${oldValue ? Object.keys(oldValue).length : 0}`);
-    
-    
-    const auditData = {
-      userId: rawUserId ? this.safeObjectId(rawUserId) : undefined,
-      userEmail: userEmail || undefined,
-      action,
-      moduleId,
-      // ✅ CAMBIO: Verificar si es un objeto con propiedades, no solo si es truthy
-      oldValue: (oldValue && typeof oldValue === 'object' && Object.keys(oldValue).length > 0)
-        ? JSON.stringify(oldValue)
-        : undefined,
-      newValue: (newValue && typeof newValue === 'object' && Object.keys(newValue).length > 0)
-        ? JSON.stringify(newValue)
-        : undefined,
-      ipAddress: getClientIp(req),
-      recordId,
-      eventDate: new Date(),
-      details,
-    };
-    
-    const auditLog = this.auditLogRepository.create(auditData);
-    await this.auditLogRepository.save(auditLog);
-    
-    this.logger.log(`✅ [createAuditLog] Auditoría guardada. oldValue guardado: ${!!auditData.oldValue}`);
-  } catch (error) {
-    console.error('❌ Error creando log de auditoría:', error);
-  }
-}
-
-  private safeObjectId(id: any): ObjectId | undefined {
-    if (!id) return undefined;
-    try {
-      return new ObjectId(id);
-    } catch {
-      return undefined;
-    }
-  }
-
-  private async enrichTicketForAudit(ticket: any) {
-    if (!ticket) return null;
-    const enriched = { ...ticket };
-
-    const getMiscName = async (id: string) => {
-      if (!id || typeof id !== 'string') return id;
-      try {
-        const item = await this.miscellaneousRepository.findOne({ _id: new ObjectId(id) } as any);
-        return item?.valor || id;
-      } catch {
-        return id;
-      }
-    };
-
-    const getUserName = async (id: string) => {
-      if (!id || typeof id !== 'string') return id;
-      try {
-        const user = await this.usersService.findUserById(id);
-        return user ? `${user.primerNombre || ''} ${user.primerApellido || ''}`.trim() || user.username || id : id;
-      } catch {
-        return id;
-      }
-    };
-
-    const miscFields = [
-      'networkCategory', 'subcategoria', 'detalle', 'tipoCliente',
-      'escaladoA', 'causaRaiz', 'SolucionCaso'
-    ];
-    for (const field of miscFields) {
-      if (enriched[field]) {
-        enriched[field] = await getMiscName(enriched[field]);
-      }
-    }
-
-    if (Array.isArray(enriched.serviciosAfectados)) {
-      enriched.serviciosAfectados = await Promise.all(
-        enriched.serviciosAfectados.map((id: string) => getMiscName(id))
-      );
-    }
-
-    const userFields = ['operatorResponsable', 'operatorAsignado'];
-    for (const field of userFields) {
-      if (enriched[field]) {
-        enriched[field] = await getUserName(enriched[field]);
-      }
-    }
-
-    return enriched;
-  }
 
   async stats() {
     const startOfToday = new Date();
@@ -752,77 +508,42 @@ private async createAuditLog(
     };
   }
 
-  // ✅ REPORTE: incidencias por servicio con agregación en MongoDB (server-side)
   async getReporteIncidencias(mes: string, tipoServicio?: string) {
-    // Rango del mes: [inicio, inicio del mes siguiente)
     const [year, month] = mes.split('-').map(Number);
     const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
     const end = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
 
     const pipeline: any[] = [
-      // 1️⃣ Solo tickets del mes seleccionado
       { $match: { createdAt: { $gte: start, $lt: end } } },
-
-      // 2️⃣ Un documento por cada servicio afectado (desenrolla el array)
       { $unwind: '$serviciosAfectados' },
-
-      // 3️⃣ Convertir el string a ObjectId de forma segura (inválidos → null)
-      {
-        $addFields: {
-          servicioIdObj: {
-            $convert: { input: '$serviciosAfectados', to: 'objectId', onError: null, onNull: null },
-          },
-        },
-      },
+      { $addFields: { servicioIdObj: { $convert: { input: '$serviciosAfectados', to: 'objectId', onError: null, onNull: null } } } },
       { $match: { servicioIdObj: { $ne: null } } },
-
-      // 4️⃣ Join con servicios para obtener tipo y campos técnicos
-      {
-        $lookup: {
-          from: 'services',
-          localField: 'servicioIdObj',
-          foreignField: '_id',
-          as: 'servicioDoc',
-        },
-      },
+      { $lookup: { from: 'services', localField: 'servicioIdObj', foreignField: '_id', as: 'servicioDoc' } },
       { $unwind: { path: '$servicioDoc', preserveNullAndEmptyArrays: false } },
     ];
 
-    // 5️⃣ Filtro opcional por tipo de servicio (aplicado en servidor)
-    if (tipoServicio) {
-      pipeline.push({ $match: { 'servicioDoc.tipoServicio': tipoServicio } });
-    }
+    if (tipoServicio) pipeline.push({ $match: { 'servicioDoc.tipoServicio': tipoServicio } });
 
-    // 6️⃣ Agrupación por servicio con todas las métricas que necesita el frontend
     pipeline.push(
       {
         $group: {
           _id: '$servicioDoc._id',
           tipoServicio: { $first: { $ifNull: ['$servicioDoc.tipoServicio', 'N/A'] } },
-          servicioNombre: {
-            $first: { $ifNull: ['$servicioDoc.name', { $ifNull: ['$servicioDoc.id_circuito', 'Servicio desconocido'] }] },
-          },
+          servicioNombre: { $first: { $ifNull: ['$servicioDoc.name', { $ifNull: ['$servicioDoc.id_circuito', 'Servicio desconocido'] }] } },
           id_circuito: { $first: '$servicioDoc.id_circuito' },
           id_netuno: { $first: '$servicioDoc.id_netuno' },
           contrato: { $first: '$servicioDoc.contrato' },
           ultimaMilla: { $first: '$servicioDoc.ultimaMilla' },
           proveedorDelServicioCompartido: { $first: '$servicioDoc.proveedorDelServicioCompartido' },
           totalIncidencias: { $sum: 1 },
-          abiertas: {
-            $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'cerrado'] }, 0, 1] },
-          },
-          cerradas: {
-            $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'cerrado'] }, 1, 0] },
-          },
+          abiertas: { $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'cerrado'] }, 0, 1] } },
+          cerradas: { $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'cerrado'] }, 1, 0] } },
           ultimaIncidencia: { $max: '$createdAt' },
           tickets: {
             $push: {
-              _id: { $toString: '$_id' },
-              caseNumber: { $ifNull: ['$caseNumber', 'S/N'] },
-              subject: { $ifNull: ['$subject', 'Sin asunto'] },
-              status: { $ifNull: ['$status', 'N/A'] },
-              createdAt: '$createdAt',
-              incidentType: { $ifNull: ['$incidentType', 'Sin Clasificar'] },
+              _id: { $toString: '$_id' }, caseNumber: { $ifNull: ['$caseNumber', 'S/N'] },
+              subject: { $ifNull: ['$subject', 'Sin asunto'] }, status: { $ifNull: ['$status', 'N/A'] },
+              createdAt: '$createdAt', incidentType: { $ifNull: ['$incidentType', 'Sin Clasificar'] },
             },
           },
         },
@@ -831,64 +552,36 @@ private async createAuditLog(
     );
 
     const servicios = await this.ticketRepository.aggregate(pipeline).toArray();
-
-    // Totales ligeros (sobre el resultado ya agregado, no sobre la colección completa)
-    const totales = servicios.reduce(
-      (acc: any, s: any) => ({
-        total: acc.total + s.totalIncidencias,
-        abiertas: acc.abiertas + s.abiertas,
-        cerradas: acc.cerradas + s.cerradas,
-        servicios: acc.servicios + 1,
-      }),
-      { total: 0, abiertas: 0, cerradas: 0, servicios: 0 },
-    );
+    const totales = servicios.reduce((acc: any, s: any) => ({
+      total: acc.total + s.totalIncidencias, abiertas: acc.abiertas + s.abiertas,
+      cerradas: acc.cerradas + s.cerradas, servicios: acc.servicios + 1,
+    }), { total: 0, abiertas: 0, cerradas: 0, servicios: 0 });
 
     return { servicios, totales };
   }
 
-  async findStaleTickets(beforeDate: Date) {
-    return await this.ticketRepository.find({
-      where: {
-        updatedAt: { $lte: beforeDate },
-        status: {
-          $not: { $regex: /cerrado|closed|resuelto|cancelado/i }
-        },
 
-      },
-    });
+  async findStaleTickets(beforeDate: Date) {
+    return await this.ticketRepository.find({ where: { updatedAt: { $lte: beforeDate }, status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } } } });
   }
 
   async findDelayedTickets(beforeDate: Date) {
-    return await this.ticketRepository.find({
-      where: {
-        updatedAt: { $lte: beforeDate },
-        operatorAsignado: { $exists: true },
-        status: {
-          $not: { $regex: /cerrado|closed|resuelto|cancelado/i }
-        },
-      },
-    });
+    return await this.ticketRepository.find({ where: { updatedAt: { $lte: beforeDate }, operatorAsignado: { $exists: true }, status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } } } });
   }
 
 
-  // ✅ 1. Buscar tickets sin actualizar por 4h Y SIN operador asignado
+
   async findUnassignedStaleTickets(beforeDate: Date) {
     return await this.ticketRepository.find({
       where: {
         updatedAt: { $lte: beforeDate },
         status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } },
-        $or: [
-          { operatorAsignado: { $exists: false } },
-          { operatorAsignado: null },
-          { operatorAsignado: '' }
-        ]
-      },
+        $or: [{ operatorAsignado: { $exists: false } }, { operatorAsignado: null }, { operatorAsignado: '' }]
+      }
     } as any);
   }
 
-  // ✅ 2. Obtener el operador activo con menos tickets en gestión
-  // ✅ Obtener el operador ONLINE con menos tickets en gestión
-// ✅ Actualiza este método en tu TicketService
+ 
 async getLeastLoadedOperator(excludeUserId?: string) {
   // 1. Obtener IDs de usuarios activos (online en los últimos 10 min)
   const activeUserIds = await this.userSessionsService.getActiveUserIds();

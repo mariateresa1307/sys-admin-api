@@ -11,14 +11,14 @@ import {
   ValidationPipe, 
   UseGuards, 
   Req, 
-  UseInterceptors // ✅ 1. AGREGADO: Necesario para usar el decorador
+  UseInterceptors 
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { TicketService } from './ticket.service';
 import { TicketDto } from './dto/create-ticket.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
-import { AuditInterceptor } from 'src/audit/interceptors/audit.interceptor'; // ✅ 2. AGREGADO: La ruta a tu interceptor
+import { AuditInterceptor } from 'src/audit/interceptors/audit.interceptor'; 
 
 @Controller('tickets')
 @UsePipes(
@@ -99,24 +99,23 @@ export class TicketController {
   }
 
   @Put(':id')
-  @UseInterceptors(AuditInterceptor) // ✅ 3. AGREGADO: Activa el interceptor solo para esta ruta
+  @UseInterceptors(AuditInterceptor) 
   async update(
     @Param('id') id: string,
     @Body() updateTicketDto: UpdateTicketDto,
     @Req() req: Request
   ) {
-    // ✅ A. Capturar el estado ANTES de actualizar
+   
     const oldTicket = await this.ticketService.findTicketById(id);
     
-    // ✅ B. Pasarlo al objeto request para que el interceptor lo lea
     (req as any).oldValue = oldTicket;
     (req as any).newValue = updateTicketDto;
     
-    // ✅ C. Ejecutar la actualización
     return this.ticketService.updateTicket(id, updateTicketDto, req);
   }
 
   @Put(':id/close')
+    @UseInterceptors(AuditInterceptor) 
   async closeTicket(
     @Param('id') id: string,
     @Req() req: Request,
@@ -130,6 +129,7 @@ export class TicketController {
   }
 
   @Put(':id/reopen')
+   @UseInterceptors(AuditInterceptor)
   async reopenTicket(
     @Param('id') id: string,
     @Req() req: Request,
