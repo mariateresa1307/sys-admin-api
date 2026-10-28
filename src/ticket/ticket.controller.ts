@@ -115,24 +115,6 @@ export class TicketController {
   }
 
   @Put(':id/close')
-<<<<<<< HEAD
-  @UseInterceptors(AuditInterceptor)
-async closeTicket(@Param('id') id: string, @Req() req: Request, @Body() updateDto?: any) {
-  const oldTicket = await this.ticketService.findTicketById(id);
-  (req as any).oldValue = oldTicket;
-  (req as any).newValue = { status: 'CERRADO' };
-  return this.ticketService.closeTicket(id, updateDto, req);
-}
-
-  @Put(':id/reopen')
-  @UseInterceptors(AuditInterceptor)
-async reopenTicket(@Param('id') id: string, @Req() req: Request) {
-  const oldTicket = await this.ticketService.findTicketById(id);
-  (req as any).oldValue = oldTicket;
-  (req as any).newValue = { status: 'ACTIVO' };
-  return this.ticketService.reopenTicket(id, req);
-}
-=======
     @UseInterceptors(AuditInterceptor) 
   async closeTicket(
     @Param('id') id: string,
@@ -159,5 +141,4 @@ async reopenTicket(@Param('id') id: string, @Req() req: Request) {
     
     return this.ticketService.reopenTicket(id, req);
   }
->>>>>>> 8c37972daa6400b85885bcb97dbe99abdf1ed005
 }
