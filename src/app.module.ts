@@ -37,7 +37,7 @@ import { Notification } from './notifications/entities/notification.entity';
         type: 'mongodb',
         url: configService.get<string>('MONGO_URI'),
         entities: [User, AuditLog, Service, Ticket, Miscellaneous, UserSession, Notification],
-        synchronize: true,
+        synchronize: false,
       }),
       inject: [ConfigService],
     }),

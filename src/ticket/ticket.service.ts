@@ -350,25 +350,10 @@ async findAllPaginated(
     };
   }
 
-<<<<<<< HEAD
- 
-  async updateTicket(
-    id: string,
-    updateTicketDto: UpdateTicketDto,
-    req?: Request,
-  ): Promise<Ticket> {
-    let objectId: ObjectId;
-    try {
-      objectId = new ObjectId(id);
-    } catch {
-      throw new BadRequestException('ID inválido');
-    }
-=======
   
   async updateTicket(id: string, updateTicketDto: UpdateTicketDto, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
     try { objectId = new ObjectId(id); } catch { throw new BadRequestException('ID inválido'); }
->>>>>>> 8c37972daa6400b85885bcb97dbe99abdf1ed005
 
     const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
     if (!oldTicket) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
@@ -450,16 +435,12 @@ async findAllPaginated(
       { $set: updateData },
     );
 
-<<<<<<< HEAD
-
-=======
     await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
 
     if (req) {
       const userData = (req as any).user;
       await this.notificationsService.notifyTicketClosure(ticket, userData?._id?.toString() || 'SYSTEM');
     }
->>>>>>> 8c37972daa6400b85885bcb97dbe99abdf1ed005
 
     return this.findTicketById(id);
   }
@@ -488,126 +469,10 @@ async findAllPaginated(
     const updateData = { status: TICKET_STATUS.ACTIVO, updatedAt: new Date() };
     await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
 
-<<<<<<< HEAD
-    await this.ticketRepository.updateOne(
-      { _id: objectId },
-      { $set: updateData },
-    );
-
-
-=======
->>>>>>> 8c37972daa6400b85885bcb97dbe99abdf1ed005
 
     return this.findTicketById(id);
   }
 
-<<<<<<< HEAD
-/*private async createAuditLog(
-  recordId: string,
-  moduleId: string,
-  action: string,
-  user: any,
-  oldValue: any,
-  newValue: any,
-  req: Request,
-  details: string,
-) {
-  try {
-    const rawUserId = user?.sub ?? user?._id;
-    const userEmail = user?.email ?? user?.userEmail;
-    
-    // 🔍 DEBUG: Verificar qué llega
-    this.logger.log(`📝 [createAuditLog] oldValue type: ${typeof oldValue}, isArray: ${Array.isArray(oldValue)}`);
-    this.logger.log(`📝 [createAuditLog] oldValue keys: ${oldValue ? Object.keys(oldValue).length : 0}`);
-    
-    
-    const auditData = {
-      userId: rawUserId ? this.safeObjectId(rawUserId) : undefined,
-      userEmail: userEmail || undefined,
-      action,
-      moduleId,
-      // ✅ CAMBIO: Verificar si es un objeto con propiedades, no solo si es truthy
-      oldValue: (oldValue && typeof oldValue === 'object' && Object.keys(oldValue).length > 0)
-        ? JSON.stringify(oldValue)
-        : undefined,
-      newValue: (newValue && typeof newValue === 'object' && Object.keys(newValue).length > 0)
-        ? JSON.stringify(newValue)
-        : undefined,
-      ipAddress: getClientIp(req),
-      recordId,
-      eventDate: new Date(),
-      details,
-    };
-    
-    const auditLog = this.auditLogRepository.create(auditData);
-    await this.auditLogRepository.save(auditLog);
-    
-    this.logger.log(`✅ [createAuditLog] Auditoría guardada. oldValue guardado: ${!!auditData.oldValue}`);
-  } catch (error) {
-    console.error('❌ Error creando log de auditoría:', error);
-  }
-}*/
-
-  private safeObjectId(id: any): ObjectId | undefined {
-    if (!id) return undefined;
-    try {
-      return new ObjectId(id);
-    } catch {
-      return undefined;
-    }
-  }
-
-  private async enrichTicketForAudit(ticket: any) {
-    if (!ticket) return null;
-    const enriched = { ...ticket };
-
-    const getMiscName = async (id: string) => {
-      if (!id || typeof id !== 'string') return id;
-      try {
-        const item = await this.miscellaneousRepository.findOne({ _id: new ObjectId(id) } as any);
-        return item?.valor || id;
-      } catch {
-        return id;
-      }
-    };
-
-    const getUserName = async (id: string) => {
-      if (!id || typeof id !== 'string') return id;
-      try {
-        const user = await this.usersService.findUserById(id);
-        return user ? `${user.primerNombre || ''} ${user.primerApellido || ''}`.trim() || user.username || id : id;
-      } catch {
-        return id;
-      }
-    };
-
-    const miscFields = [
-      'networkCategory', 'subcategoria', 'detalle', 'tipoCliente',
-      'escaladoA', 'causaRaiz', 'SolucionCaso'
-    ];
-    for (const field of miscFields) {
-      if (enriched[field]) {
-        enriched[field] = await getMiscName(enriched[field]);
-      }
-    }
-
-    if (Array.isArray(enriched.serviciosAfectados)) {
-      enriched.serviciosAfectados = await Promise.all(
-        enriched.serviciosAfectados.map((id: string) => getMiscName(id))
-      );
-    }
-
-    const userFields = ['operatorResponsable', 'operatorAsignado'];
-    for (const field of userFields) {
-      if (enriched[field]) {
-        enriched[field] = await getUserName(enriched[field]);
-      }
-    }
-
-    return enriched;
-  }
-=======
->>>>>>> 8c37972daa6400b85885bcb97dbe99abdf1ed005
 
   async stats() {
     const startOfToday = new Date();
