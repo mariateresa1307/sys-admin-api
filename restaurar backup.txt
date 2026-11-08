@@ -1,0 +1,1 @@
+mongorestore --archive=backup_actual.archive --uri="mongodb://admin:admin@localhost/test?authSource=admin"
