@@ -27,26 +27,57 @@ export class ReportsService {
     private readonly userRepository: MongoRepository<User>,
   ) {}
 
-  async getPreview(filterDto: ReportFilterDto): Promise<ReportPreviewModel | undefined> {
-    const { grupo, plataforma, cliente, mes } = filterDto;
 
-    const query: Filter<Ticket> = {};
-
+  private buildDateQuery(fechaInicio?: string, fechaFin?: string, mes?: string): any {
+    let startDate: Date;
+    let endDate: Date;
+    let datePrefix: string | undefined;
 
     if (mes) {
       const [year, month] = mes.split('-');
       const monthPadded = month.padStart(2, '0');
-      const datePrefix = `${year}-${monthPadded}`; // Ej: "2026-08"
+      datePrefix = `${year}-${monthPadded}`;
+      startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+    } else if (fechaInicio && fechaFin) {
+      startDate = new Date(fechaInicio);
+      startDate.setHours(0, 0, 0, 0);
+      
+      endDate = new Date(fechaFin);
+      endDate.setHours(23, 59, 59, 999);
+    } else {
+      return {}; // Sin filtro de fecha
+    }
 
-      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+    const startStr = startDate.toISOString();
+    const endStr = endDate.toISOString();
 
-      query.$or = [
-        // 1. horaCierreFalla es tipo Date y está en el rango del mes
+    // Condición reutilizable para campos de fecha tipo String
+    const stringDateCondition = datePrefix
+      ? { $type: "string", $regex: `^${datePrefix}` }
+      : { $type: "string", $gte: startStr, $lte: endStr };
+
+    return {
+      $or: [
+        // ✅ 1. horaInicioFalla (Tipo Date)
+        { horaInicioFalla: { $gte: startDate, $lte: endDate } as any },
+        // ✅ 2. horaInicioFalla (Tipo String)
+        { horaInicioFalla: stringDateCondition as any },
+        
+        // 3. horaCierreFalla (Tipo Date)
         { horaCierreFalla: { $gte: startDate, $lte: endDate } as any },
-        // 2. horaCierreFalla es tipo String (ISO) y pertenece al mes
-        { horaCierreFalla: { $type: "string", $regex: `^${datePrefix}` } as any },
-        // 3. horaCierreFalla está vacía/null Y horaDeteccionNoc pertenece al mes
+        // 4. horaCierreFalla (Tipo String)
+        { horaCierreFalla: stringDateCondition as any },
+        
+        // 5. horaDeteccionNoc (Fallback)
+        {
+          $or: [
+            { horaDeteccionNoc: stringDateCondition as any },
+            { horaDeteccionNoc: { $gte: startDate, $lte: endDate } as any }
+          ]
+        } as any,
+
+        // 6. Si horaCierreFalla está vacía, verificar horaInicioFalla, horaDeteccionNoc o createdAt
         {
           $and: [
             {
@@ -54,18 +85,38 @@ export class ReportsService {
                 { horaCierreFalla: null },
                 { horaCierreFalla: "" },
                 { horaCierreFalla: { $exists: false } },
-                { horaCierreFalla: { $type: "string", $regex: "^\\s*$" } as any } // Solo espacios en blanco
+                { horaCierreFalla: { $type: "string", $regex: "^\\s*$" } as any }
               ]
             } as any,
             {
               $or: [
-                { horaDeteccionNoc: { $type: "string", $regex: `^${datePrefix}` } as any },
-                { horaDeteccionNoc: { $gte: startDate, $lte: endDate } as any } // Por si acaso en algunos registros es tipo Date
+                { horaInicioFalla: { $gte: startDate, $lte: endDate } as any },
+                { horaDeteccionNoc: { $gte: startDate, $lte: endDate } as any },
+                { createdAt: { $gte: startDate, $lte: endDate } as any }
               ]
             } as any
           ]
         } as any
-      ];
+      ]
+    };
+  }
+
+  async getPreview(filterDto: ReportFilterDto): Promise<ReportPreviewModel | undefined> {
+    const { grupo, plataforma, cliente, mes, fechaInicio, fechaFin } = filterDto;
+   console.log('🔍 [ReportsService] === DIAGNÓSTICO DE FILTROS ===');
+    console.log('🔍 [ReportsService] filterDto completo:', filterDto);
+    console.log('🔍 [ReportsService] mes:', mes);
+    console.log('🔍 [ReportsService] fechaInicio:', fechaInicio);
+    console.log('🔍 [ReportsService] fechaFin:', fechaFin);
+    const query: Filter<Ticket> = {};
+
+    // ✅ FILTRO DE FECHA UNIFICADO (Mes o Rango)
+    const dateQuery = this.buildDateQuery(fechaInicio, fechaFin, mes);
+    console.log('🔍 [ReportsService] dateQuery generado:', JSON.stringify(dateQuery, null, 2));
+
+
+    if (Object.keys(dateQuery).length > 0) {
+      Object.assign(query, dateQuery);
     }
 
     if (plataforma && plataforma !== 'TODAS') {
@@ -74,9 +125,10 @@ export class ReportsService {
     if (cliente && cliente !== 'TODOS') {
       query.tipoCliente = cliente;
     }
+    console.log('🔍 [ReportsService] query final:', JSON.stringify(query, null, 2));
 
     const tickets = await this.ticketRepository.find(query as any);
-    console.log(`📊 [ReportsService] Total tickets encontrados para Grupo ${grupo}:`, tickets.length);
+    console.log(`📊 [ReportsService] Total tickets encontrados:`, tickets.length);
 
     switch (grupo) {
       case 'A': return this.GrupoA(tickets, filterDto);
@@ -87,7 +139,6 @@ export class ReportsService {
     }
   }
 
-  
 // ============ GRUPO A  ============
 
   async GrupoA(tickets: any[], filterDto: ReportFilterDto): Promise<ReporteModelGroupA> {
@@ -235,12 +286,10 @@ export class ReportsService {
   }
 
   async getTicketsForExport(filterDto: ReportFilterDto): Promise<any[]> {
-    // ✅ Se agrega 'grupo' al destructuring para aplicar la misma lógica condicional
-    const { plataforma, cliente, mes, grupo } = filterDto;
+    const { plataforma, cliente, mes, fechaInicio, fechaFin, grupo } = filterDto;
     
     const query: any = {};
     
-    // ✅ SOLO filtrar por cerrado y afectación si NO es Grupo C
     if (grupo !== 'C') {
       query.status = TICKET_STATUS.CERRADO;
       query.afectacion = true;
@@ -248,38 +297,9 @@ export class ReportsService {
     
     console.log('📊 [Export] Filtros recibidos:', filterDto);
 
-    // ✅ MISMO FILTRO DE FECHA ROBUSTO PARA LA EXPORTACIÓN
-    if (mes) {
-      const [year, month] = mes.split('-');
-      const monthPadded = month.padStart(2, '0');
-      const datePrefix = `${year}-${monthPadded}`;
-
-      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
-
-      query.$or = [
-        { horaCierreFalla: { $gte: startDate, $lte: endDate } },
-        { horaCierreFalla: { $type: "string", $regex: `^${datePrefix}` } },
-        {
-          $and: [
-            {
-              $or: [
-                { horaCierreFalla: null },
-                { horaCierreFalla: "" },
-                { horaCierreFalla: { $exists: false } },
-                { horaCierreFalla: { $type: "string", $regex: "^\\s*$" } }
-              ]
-            },
-            {
-              $or: [
-                { horaDeteccionNoc: { $type: "string", $regex: `^${datePrefix}` } },
-                { horaDeteccionNoc: { $gte: startDate, $lte: endDate } }
-              ]
-            }
-          ]
-        }
-      ];
-      console.log('📊 [Export] Rango de fechas aplicado (horaCierreFalla/horaDeteccionNoc):', { startDate: startDate.toISOString(), endDate: endDate.toISOString() });
+    const dateQuery = this.buildDateQuery(fechaInicio, fechaFin, mes);
+    if (Object.keys(dateQuery).length > 0) {
+      Object.assign(query, dateQuery);
     }
     
     if (plataforma && plataforma !== 'TODAS') {
@@ -287,24 +307,14 @@ export class ReportsService {
     }
     if (cliente && cliente !== 'TODOS') {
       query.tipoCliente = cliente;
-      console.log('📊 [Export] Filtro cliente aplicado:', cliente);
     }
     
     const tickets = await this.ticketRepository.find(query as any);
-
     console.log(`📊 [Export] Tickets encontrados en BD (Grupo ${grupo}):`, tickets.length);
-    if (tickets.length > 0) {
-      console.log(' [Export] Ejemplo de primer ticket:', {
-        id: tickets[0]._id,
-        numeroTicket: (tickets[0] as any).numeroTicket || (tickets[0] as any).caseNumber,
-        status: tickets[0].status,
-        createdAt: tickets[0].createdAt,
-        tipoIncidencia: (tickets[0] as any).tipoIncidencia || (tickets[0] as any).incidentType
-      });
-    }
 
     return tickets;
   }
+
 
   // ============ GRUPO B  ============
 
