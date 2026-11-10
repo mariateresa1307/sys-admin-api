@@ -33,81 +33,100 @@ export class ReportsService {
     let endDate: Date;
     let datePrefix: string | undefined;
 
+    // ✅ Offset de Venezuela: UTC-4 (sumamos 4 horas para convertir hora local a UTC)
+    const VENEZUELA_OFFSET_HOURS = 4;
+
     if (mes) {
-      const [year, month] = mes.split('-');
-      const monthPadded = month.padStart(2, '0');
+      const [year, month] = mes.split('-').map(Number);
+      const monthPadded = month.toString().padStart(2, '0');
       datePrefix = `${year}-${monthPadded}`;
-      startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
-    } else if (fechaInicio && fechaFin) {
-      startDate = new Date(fechaInicio);
-      startDate.setHours(0, 0, 0, 0);
       
-      endDate = new Date(fechaFin);
-      endDate.setHours(23, 59, 59, 999);
+      // ✅ Primer día del mes a las 00:00 hora Venezuela = 04:00 UTC
+      startDate = new Date(Date.UTC(year, month - 1, 1, VENEZUELA_OFFSET_HOURS, 0, 0, 0));
+      // ✅ Último día del mes a las 23:59:59 hora Venezuela
+      endDate = new Date(Date.UTC(year, month, 0, 23 + VENEZUELA_OFFSET_HOURS, 59, 59, 999));
+      
+    } else if (fechaInicio && fechaFin) {
+      const [startYear, startMonth, startDay] = fechaInicio.split('-').map(Number);
+      const [endYear, endMonth, endDay] = fechaFin.split('-').map(Number);
+      
+      // ✅ Fecha inicio: 00:00 hora Venezuela = 04:00 UTC del mismo día
+      startDate = new Date(Date.UTC(startYear, startMonth - 1, startDay, VENEZUELA_OFFSET_HOURS, 0, 0, 0));
+      // ✅ Fecha fin: 23:59:59 hora Venezuela = 03:59:59 UTC del día siguiente
+      endDate = new Date(Date.UTC(endYear, endMonth - 1, endDay, 23 + VENEZUELA_OFFSET_HOURS, 59, 59, 999));
+      
     } else {
-      return {}; // Sin filtro de fecha
+      return {};
     }
+
+    console.log('🔍 [buildDateQuery] Rango con zona horaria Venezuela (UTC-4):', {
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString()
+    });
 
     const startStr = startDate.toISOString();
     const endStr = endDate.toISOString();
 
-    // Condición reutilizable para campos de fecha tipo String
-    const stringDateCondition = datePrefix
-      ? { $type: "string", $regex: `^${datePrefix}` }
-      : { $type: "string", $gte: startStr, $lte: endStr };
-
     return {
       $or: [
-        // ✅ 1. horaInicioFalla (Tipo Date)
-        { horaInicioFalla: { $gte: startDate, $lte: endDate } as any },
-        // ✅ 2. horaInicioFalla (Tipo String)
-        { horaInicioFalla: stringDateCondition as any },
-        
-        // 3. horaCierreFalla (Tipo Date)
-        { horaCierreFalla: { $gte: startDate, $lte: endDate } as any },
-        // 4. horaCierreFalla (Tipo String)
-        { horaCierreFalla: stringDateCondition as any },
-        
-        // 5. horaDeteccionNoc (Fallback)
-        {
-          $or: [
-            { horaDeteccionNoc: stringDateCondition as any },
-            { horaDeteccionNoc: { $gte: startDate, $lte: endDate } as any }
-          ]
-        } as any,
-
-        // 6. Si horaCierreFalla está vacía, verificar horaInicioFalla, horaDeteccionNoc o createdAt
-        {
+        // 1. Tickets CERRADOS en el período (horaCierreFalla dentro del rango)
+        { 
           $and: [
+            { status: 'CERRADO' },
             {
               $or: [
-                { horaCierreFalla: null },
-                { horaCierreFalla: "" },
-                { horaCierreFalla: { $exists: false } },
-                { horaCierreFalla: { $type: "string", $regex: "^\\s*$" } as any }
+                { horaCierreFalla: { $gte: startDate, $lte: endDate } as any },
+                datePrefix 
+                  ? { horaCierreFalla: { $type: "string", $regex: `^${datePrefix}` } as any }
+                  : { horaCierreFalla: { $type: "string", $gte: startStr, $lte: endStr } as any }
               ]
-            } as any,
+            }
+          ]
+        },
+        
+        // 2. Tickets NO CERRADOS que iniciaron en el período
+        {
+          $and: [
+            { status: { $ne: 'CERRADO' } },
             {
               $or: [
                 { horaInicioFalla: { $gte: startDate, $lte: endDate } as any },
-                { horaDeteccionNoc: { $gte: startDate, $lte: endDate } as any },
+                datePrefix 
+                  ? { horaInicioFalla: { $type: "string", $regex: `^${datePrefix}` } as any }
+                  : { horaInicioFalla: { $type: "string", $gte: startStr, $lte: endStr } as any },
                 { createdAt: { $gte: startDate, $lte: endDate } as any }
               ]
-            } as any
+            }
           ]
-        } as any
+        },
+
+        // 3. Fallback: Si no hay horaCierreFalla ni horaInicioFalla, usar horaDeteccionNoc
+        {
+          $and: [
+            { 
+              $or: [
+                { horaCierreFalla: null },
+                { horaCierreFalla: { $exists: false } },
+                { horaInicioFalla: null },
+                { horaInicioFalla: { $exists: false } }
+              ]
+            },
+            {
+              $or: [
+                datePrefix
+                  ? { horaDeteccionNoc: { $type: "string", $regex: `^${datePrefix}` } as any }
+                  : { horaDeteccionNoc: { $type: "string", $gte: startStr, $lte: endStr } as any },
+                { horaDeteccionNoc: { $gte: startDate, $lte: endDate } as any }
+              ]
+            }
+          ]
+        }
       ]
     };
   }
 
   async getPreview(filterDto: ReportFilterDto): Promise<ReportPreviewModel | undefined> {
     const { grupo, plataforma, cliente, mes, fechaInicio, fechaFin } = filterDto;
-   console.log('🔍 [ReportsService] === DIAGNÓSTICO DE FILTROS ===');
-    console.log('🔍 [ReportsService] filterDto completo:', filterDto);
-    console.log('🔍 [ReportsService] mes:', mes);
-    console.log('🔍 [ReportsService] fechaInicio:', fechaInicio);
-    console.log('🔍 [ReportsService] fechaFin:', fechaFin);
     const query: Filter<Ticket> = {};
 
     // ✅ FILTRO DE FECHA UNIFICADO (Mes o Rango)
@@ -142,10 +161,6 @@ export class ReportsService {
 // ============ GRUPO A  ============
 
   async GrupoA(tickets: any[], filterDto: ReportFilterDto): Promise<ReporteModelGroupA> {
-    const { plataforma, cliente, mes } = filterDto;
-
-    // ✅ Ya no usamos 'closedFilter'. El array 'tickets' ya viene con TODOS los tickets del mes.
-    
     const [categoriasRed, tiposCliente] = await Promise.all([
       this.miscellaneousRepository.find({ categoria: CATEGORIA.CATEGORIA_RED }),
       this.miscellaneousRepository.find({ categoria: CATEGORIA.TIPO_CLIENTE }),
@@ -153,13 +168,9 @@ export class ReportsService {
 
     const categoryIds = categoriasRed.map((item) => item._id.toString());
     const tipoClienteIds = tiposCliente.map((item) => item._id.toString());
-
-    // ✅ Conteos directos sobre el array 'tickets' (incluye activos, en gestión y cerrados)
     const incidentesPorPlataforma = tickets.filter(t => categoryIds.includes(String(t.networkCategory))).length;
     const incidentesPorServicio = tickets.filter(t => tipoClienteIds.includes(String(t.tipoCliente))).length;
     const totalTickets = tickets.length;
-
-    // Para el MTTR, calculamos el promedio solo sobre los tickets que realmente tienen tiempo registrado
     const ticketsConMttr = tickets.filter(t => t.mttrTotal && t.mttrTotal > 0);
     
     const [mttrByCategory, mttrTipoCliente] = await Promise.all([
@@ -180,8 +191,6 @@ export class ReportsService {
       const escaladoA = (t.escaladoA || '').toString().trim().toUpperCase();
       return escaladoA === 'SI' || (escaladoA !== '' && escaladoA !== 'NO');
     }).length;
-
-    // ✅ Esto ahora contará correctamente Puntuales, Masivas y Mantenimiento de TODOS los tickets
     const incidentesPorTipo = this.countByTipoIncidencia(tickets);
 
     const fallasResueltasEnSoporte = totalTickets > 0
