@@ -48,6 +48,8 @@ export class TicketService {
       throw new BadRequestException('El número de caso debe tener el formato: 4 letras mayúsculas, guion y 6 números (ej. DIST-506009)');
     }
 
+    
+
     let attempts = 0;
     const maxAttempts = 5;
     let currentCaseNumber = createTicketDto.caseNumber;
@@ -60,8 +62,13 @@ export class TicketService {
 
       if (!existingTicket) {
         // ✅ No existe, es seguro crearlo
+
+       const tipoClienteNormalizado = this.normalizeTipoCliente(createTicketDto.tipoCliente, createTicketDto.incidentType);
+
         const newTicket = this.ticketRepository.create({
           ...createTicketDto,
+          // ✅ Guardar como string o array nativo de MongoDB. NO usar .join(', ')
+          tipoCliente: tipoClienteNormalizado as any, 
           caseNumber: currentCaseNumber,
           operatorResponsable: userId || undefined,
         });
@@ -77,6 +84,21 @@ export class TicketService {
     }
 
     throw new BadRequestException('No se pudo generar un número de ticket único después de varios intentos. Intente nuevamente.');
+  }
+
+  // Dentro de TicketService
+private normalizeTipoCliente(tipoCliente: string | string[] | undefined, incidentType?: string): string | string[] | undefined {
+    if (tipoCliente === undefined || tipoCliente === null) return undefined;
+    
+    const upperIncident = (incidentType || '').toUpperCase();
+    const esMultiseleccion = upperIncident.includes('MASIVA') || 
+                             upperIncident.includes('VENTANA MANTENIMIENTO') ;
+
+    if (esMultiseleccion) {
+      return Array.isArray(tipoCliente) ? tipoCliente : [tipoCliente];
+    } else {
+      return Array.isArray(tipoCliente) ? (tipoCliente[0] || undefined) : tipoCliente;
+    }
   }
 
 async findAllPaginated(
@@ -111,19 +133,39 @@ async findAllPaginated(
       findOptions.where = where;
     }
 
-    const [data, total] = await Promise.all([
+   const [data, total] = await Promise.all([
       this.ticketRepository.find(findOptions as any)
         .then(tickets => {
           console.log(`📦 [findAllPaginated] Tickets encontrados en BD: ${tickets.length}`);
           return Promise.all(
             tickets.map(async (ticket) => {
-              if (ticket.tipoCliente && typeof ticket.tipoCliente === 'string') {
+              // ✅ POBLACIÓN ROBUSTA: Soporta string, ObjectId nativo y array mixto
+              if (ticket.tipoCliente) {
                 try {
-                  const tipoClienteDoc = await this.miscellaneousRepository.findOne({
-                    _id: new ObjectId(ticket.tipoCliente)
-                  } as any);
-                  if (tipoClienteDoc) {
-                    (ticket as any).tipoCliente = tipoClienteDoc;
+                  const rawIds = Array.isArray(ticket.tipoCliente) ? ticket.tipoCliente : [ticket.tipoCliente];
+                  
+                  const validObjectIds = rawIds
+                    .map((id: any) => {
+                      if (typeof id === 'string') return id;
+                      if (id && typeof id === 'object') {
+                        const str = id.toString();
+                        const match = str.match(/ObjectId\(['"]?([0-9a-fA-F]{24})['"]?\)/);
+                        return match ? match[1] : str;
+                      }
+                      return null;
+                    })
+                    .filter((id: any): id is string => id && /^[0-9a-fA-F]{24}$/.test(id))
+                    .map((id: string) => new ObjectId(id));
+
+                  if (validObjectIds.length > 0) {
+                    const docs = await this.miscellaneousRepository.find({
+                      _id: { $in: validObjectIds }
+                    } as any);
+
+                    if (docs.length > 0) {
+                      // Preservar el formato original: array si era array, objeto si era string
+                      (ticket as any).tipoCliente = Array.isArray(ticket.tipoCliente) ? docs : docs[0];
+                    }
                   }
                 } catch (error) {
                   console.warn('⚠️ Error populando tipoCliente:', error);
@@ -157,6 +199,7 @@ async findAllPaginated(
         }),
       where ? this.ticketRepository.count(where) : this.ticketRepository.count(),
     ]);
+
 
     const enrichedData = await this.enrichTicketsWithUsers(data);
 
@@ -316,6 +359,38 @@ async findAllPaginated(
       throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
     }
 
+
+     if (ticket.tipoCliente) {
+      try {
+        const rawIds = Array.isArray(ticket.tipoCliente) ? ticket.tipoCliente : [ticket.tipoCliente];
+        
+        const validObjectIds = rawIds
+          .map((id: any) => {
+            if (typeof id === 'string') return id;
+            if (id && typeof id === 'object') {
+              const str = id.toString();
+              const match = str.match(/ObjectId\(['"]?([0-9a-fA-F]{24})['"]?\)/);
+              return match ? match[1] : str;
+            }
+            return null;
+          })
+          .filter((id: any): id is string => id && /^[0-9a-fA-F]{24}$/.test(id))
+          .map((id: string) => new ObjectId(id));
+
+        if (validObjectIds.length > 0) {
+          const docs = await this.miscellaneousRepository.find({
+            _id: { $in: validObjectIds }
+          } as any);
+
+          if (docs.length > 0) {
+            (ticket as any).tipoCliente = Array.isArray(ticket.tipoCliente) ? docs : docs[0];
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Error populando tipoCliente en findTicketById:', error);
+      }
+    }
+    
     if (Array.isArray(ticket.serviciosAfectados) && ticket.serviciosAfectados.length > 0) {
       try {
         // Extraer IDs tanto si son strings como si son objetos con _id
@@ -350,22 +425,30 @@ async findAllPaginated(
     };
   }
 
-  
-  async updateTicket(id: string, updateTicketDto: UpdateTicketDto, req?: Request): Promise<Ticket> {
-    let objectId: ObjectId;
-    try { objectId = new ObjectId(id); } catch { throw new BadRequestException('ID inválido'); }
+ async updateTicket(id: string, updateTicketDto: UpdateTicketDto, req?: Request): Promise<Ticket> {
+  let objectId: ObjectId;
+  try { objectId = new ObjectId(id); } catch { throw new BadRequestException('ID inválido'); }
 
-    const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
-    if (!oldTicket) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
+  const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
+  if (!oldTicket) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
 
-    const updateData = Object.fromEntries(Object.entries(updateTicketDto).filter(([, value]) => value !== undefined));
-    updateData.updatedAt = new Date();
+  const updateData = Object.fromEntries(
+    Object.entries(updateTicketDto).filter(([, value]) => value !== undefined)
+  );
 
-    const result = await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
-    if (result.matchedCount === 0) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
+  // ✅ Normalizar tipoCliente a array
+  if (updateData.tipoCliente !== undefined) {
+    const incidentType = updateData.incidentType || oldTicket.incidentType;
+  updateData.tipoCliente = this.normalizeTipoCliente(updateData.tipoCliente as any, incidentType);
+}
 
-    return this.findTicketById(id);
-  }
+  updateData.updatedAt = new Date();
+
+  const result = await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
+  if (result.matchedCount === 0) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
+
+  return this.findTicketById(id);
+}
 
 
   async closeTicket(id: string, updateDto?: any, req?: Request): Promise<Ticket> {

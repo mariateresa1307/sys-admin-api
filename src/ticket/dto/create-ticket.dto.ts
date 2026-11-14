@@ -1,5 +1,6 @@
 import { IsNotEmpty, IsString, IsOptional, IsArray, IsBoolean, Matches } from 'class-validator';
 import { CreateDateColumn } from 'typeorm';
+import { IsStringOrArrayOfStrings } from './validators/is-string-or-array.validator'; // ✅ Importar
 
 export class TicketDto {
   @IsString()
@@ -37,13 +38,13 @@ export class TicketDto {
   @IsNotEmpty()
   detalle?: string;
 
-  @IsString()
   @IsOptional()
-  tipoCliente?: string;
+  @IsStringOrArrayOfStrings({ message: 'tipoCliente debe ser un string o un array de strings' })
+  tipoCliente?: string | string[]; 
 
-  @IsArray()
+ @IsArray()
   @IsString({ each: true })
-  @IsNotEmpty()
+  @IsOptional()
   serviciosAfectados!: string[];
 
   @IsString()
