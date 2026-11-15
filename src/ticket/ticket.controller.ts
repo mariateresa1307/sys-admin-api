@@ -50,6 +50,7 @@ export class TicketController {
     @Query('operatorId') operatorId?: string,
     @Query('tipoCliente') tipoCliente?: string,
     @Query('incidentType') incidentType?: string,
+    @Query('fechaInicioFalla') fechaInicioFalla?: string,
   ) {
     const pageNumber = Number(page) || 1;
     const limitNumber = Number(limit) || 10;
@@ -61,6 +62,7 @@ export class TicketController {
       operatorId,
       tipoCliente,
       incidentType,
+       fechaInicioFalla, 
     });
   }
 

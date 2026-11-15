@@ -48,7 +48,7 @@ export class TicketService {
       throw new BadRequestException('El número de caso debe tener el formato: 4 letras mayúsculas, guion y 6 números (ej. DIST-506009)');
     }
 
-    
+
 
     let attempts = 0;
     const maxAttempts = 5;
@@ -63,12 +63,12 @@ export class TicketService {
       if (!existingTicket) {
         // ✅ No existe, es seguro crearlo
 
-       const tipoClienteNormalizado = this.normalizeTipoCliente(createTicketDto.tipoCliente, createTicketDto.incidentType);
+        const tipoClienteNormalizado = this.normalizeTipoCliente(createTicketDto.tipoCliente, createTicketDto.incidentType);
 
         const newTicket = this.ticketRepository.create({
           ...createTicketDto,
           // ✅ Guardar como string o array nativo de MongoDB. NO usar .join(', ')
-          tipoCliente: tipoClienteNormalizado as any, 
+          tipoCliente: tipoClienteNormalizado as any,
           caseNumber: currentCaseNumber,
           operatorResponsable: userId || undefined,
         });
@@ -87,12 +87,13 @@ export class TicketService {
   }
 
   // Dentro de TicketService
-private normalizeTipoCliente(tipoCliente: string | string[] | undefined, incidentType?: string): string | string[] | undefined {
+  private normalizeTipoCliente(tipoCliente: string | string[] | undefined, incidentType?: string): string | string[] | undefined {
     if (tipoCliente === undefined || tipoCliente === null) return undefined;
-    
+
     const upperIncident = (incidentType || '').toUpperCase();
-    const esMultiseleccion = upperIncident.includes('MASIVA') || 
-                             upperIncident.includes('VENTANA MANTENIMIENTO') ;
+    const esMultiseleccion = upperIncident.includes('MASIVA') ||
+      upperIncident.includes('VENTANA') ||
+      upperIncident.includes('MANTENIMIENTO');
 
     if (esMultiseleccion) {
       return Array.isArray(tipoCliente) ? tipoCliente : [tipoCliente];
@@ -101,7 +102,7 @@ private normalizeTipoCliente(tipoCliente: string | string[] | undefined, inciden
     }
   }
 
-async findAllPaginated(
+  async findAllPaginated(
     page = 1,
     limit = 10,
     filters: {
@@ -111,8 +112,9 @@ async findAllPaginated(
       excludeStatus?: string;
       primerNombre?: string;
       operatorId?: string;
-      tipoCliente?: string; 
+      tipoCliente?: string;
       incidentType?: string;
+      fechaInicioFalla?: string;
     } = {},
   ) {
     console.log('🔍 [findAllPaginated] Filtros recibidos:', filters);
@@ -133,7 +135,7 @@ async findAllPaginated(
       findOptions.where = where;
     }
 
-   const [data, total] = await Promise.all([
+    const [data, total] = await Promise.all([
       this.ticketRepository.find(findOptions as any)
         .then(tickets => {
           console.log(`📦 [findAllPaginated] Tickets encontrados en BD: ${tickets.length}`);
@@ -143,7 +145,7 @@ async findAllPaginated(
               if (ticket.tipoCliente) {
                 try {
                   const rawIds = Array.isArray(ticket.tipoCliente) ? ticket.tipoCliente : [ticket.tipoCliente];
-                  
+
                   const validObjectIds = rawIds
                     .map((id: any) => {
                       if (typeof id === 'string') return id;
@@ -270,35 +272,39 @@ async findAllPaginated(
     excludeStatus?: string;
     primerNombre?: string;
     operatorId?: string;
-    tipoCliente?: string; 
-    incidentType?: string; 
+    tipoCliente?: string;
+    incidentType?: string;
+    fechaInicioFalla?: string;
   }) {
-    const where: Record<string, unknown> = {};
+    const andConditions: any[] = [];
 
     if (filters.caseNumber?.trim()) {
-      where.caseNumber = { $regex: filters.caseNumber.trim(), $options: 'i' };
+      andConditions.push({ caseNumber: { $regex: filters.caseNumber.trim(), $options: 'i' } });
     }
 
     if (filters.subject?.trim()) {
-      where.subject = { $regex: filters.subject.trim(), $options: 'i' };
+      andConditions.push({ subject: { $regex: filters.subject.trim(), $options: 'i' } });
     }
 
     if (filters.status?.trim()) {
       const statusArray = filters.status.split(',').map(s => s.trim()).filter(Boolean);
       if (statusArray.length > 1) {
-        where.status = { $in: statusArray.map(s => new RegExp(`^${s}$`, 'i')) };
+        andConditions.push({ status: { $in: statusArray.map(s => new RegExp(`^${s}$`, 'i')) } });
       } else if (statusArray.length === 1) {
-        where.status = new RegExp(`^${statusArray[0]}$`, 'i');
+        andConditions.push({ status: new RegExp(`^${statusArray[0]}$`, 'i') });
       }
     } else if (filters.excludeStatus?.trim()) {
-      where.status = { $not: new RegExp(`^${filters.excludeStatus.trim()}$`, 'i') };
+      andConditions.push({ status: { $not: new RegExp(`^${filters.excludeStatus.trim()}$`, 'i') } });
     }
+
 
     if (filters.operatorId?.trim() || filters.primerNombre?.trim()) {
       const orConditions: any[] = [];
       if (filters.operatorId?.trim()) {
-        orConditions.push({ operatorAsignado: filters.operatorId.trim() });
-        orConditions.push({ operatorResponsable: filters.operatorId.trim() });
+        const id = filters.operatorId.trim();
+        const idVariants = /^[0-9a-fA-F]{24}$/.test(id) ? [id, new ObjectId(id)] : [id];
+        orConditions.push({ operatorAsignado: { $in: idVariants } });
+        orConditions.push({ operatorResponsable: { $in: idVariants } });
       }
       if (filters.primerNombre?.trim()) {
         const term = filters.primerNombre.trim();
@@ -306,42 +312,68 @@ async findAllPaginated(
         orConditions.push({ operatorAsignado: { $regex: term, $options: 'i' } });
         orConditions.push({ operador: { $regex: term, $options: 'i' } });
       }
-      if (orConditions.length > 0) where.$or = orConditions;
+      if (orConditions.length > 0) andConditions.push({ $or: orConditions });
     }
 
     // ✅ SOLUCIÓN DEFINITIVA: Buscar por string O por ObjectId usando $or
-   if (filters.tipoCliente?.trim()) {
+    if (filters.tipoCliente?.trim()) {
       const searchValue = filters.tipoCliente.trim();
-      console.log('🔍 [buildSearchFilter] Filtrando por tipoCliente:', searchValue);
-      
       if (/^[0-9a-fA-F]{24}$/.test(searchValue)) {
-        try {
-          // $in es perfectamente válido a nivel de campo en MongoDB
-          where.tipoCliente = { 
-            $in: [
-              searchValue,              // Coincide si está guardado como string
-              new ObjectId(searchValue) // Coincide si está guardado como ObjectId
-            ] 
-          };
-          console.log('🔍 [buildSearchFilter] Buscando con $in (string u ObjectId)');
-        } catch (e) {
-          // Fallback por si acaso
-          where.tipoCliente = searchValue;
-        }
+        andConditions.push({ tipoCliente: { $in: [searchValue, new ObjectId(searchValue)] } });
       } else {
-        // Es un nombre (FALLA MASIVA, VENTANA, etc.)
-        where.tipoCliente = searchValue;
+        try {
+          const docs = await this.miscellaneousRepository.find({
+            categoria: 'TIPO_CLIENTE',
+            valor: { $regex: `^${searchValue}$`, $options: 'i' }
+          } as any);
+          const oids = docs.map((d: any) => d._id);
+          if (oids.length > 0) {
+            andConditions.push({ tipoCliente: { $in: [...oids, searchValue] } });
+          } else {
+            andConditions.push({ tipoCliente: searchValue });
+          }
+        } catch {
+          andConditions.push({ tipoCliente: searchValue });
+        }
       }
     }
 
+
     if (filters.incidentType?.trim()) {
-      const searchValue = filters.incidentType.trim();
-      console.log(' [buildSearchFilter] Filtrando por incidentType:', searchValue);
-      where.incidentType = { $regex: searchValue, $options: 'i' };
+      andConditions.push({ incidentType: { $regex: filters.incidentType.trim(), $options: 'i' } });
     }
 
-    console.log('🔍 [buildSearchFilter] Where final:', JSON.stringify(where, null, 2));
-    return Object.keys(where).length > 0 ? where : null;
+
+ if (filters.fechaInicioFalla?.trim()) {
+      const fechaStr = filters.fechaInicioFalla.trim();
+      const partes = fechaStr.split(/[-/]/);
+      if (partes.length === 3) {
+        let y: number, m: number, d: number;
+        if (partes[0].length === 4) [y, m, d] = partes.map(Number);   // YYYY-MM-DD
+        else [d, m, y] = partes.map(Number);                            // DD-MM-YYYY
+
+        const isoDay = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        // Rango en UTC equivalente a 00:00–23:59 de Venezuela (UTC-4)
+        const dayStart = new Date(Date.UTC(y, m - 1, d, 4, 0, 0, 0));
+        const dayEnd   = new Date(Date.UTC(y, m - 1, d, 27, 59, 59, 999));
+        const range = { $gte: dayStart, $lte: dayEnd };
+
+        andConditions.push({
+          $or: [
+            // 1) horaInicioFalla guardado como string naive "YYYY-MM-DDTHH:mm"
+            { horaInicioFalla: { $regex: `^${isoDay}` } },
+            // 2) horaInicioFalla guardado como Date (UTC)
+            { horaInicioFalla: range },
+            // 3) fallback a createdAt (Date) para el mismo día Venezuela
+            { horaInicioFalla: null, createdAt: range },
+            { horaInicioFalla: undefined, createdAt: range },
+          ],
+        });
+      }
+    }
+
+    if (andConditions.length === 0) return null;
+    return andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
   }
 
 
@@ -360,10 +392,10 @@ async findAllPaginated(
     }
 
 
-     if (ticket.tipoCliente) {
+    if (ticket.tipoCliente) {
       try {
         const rawIds = Array.isArray(ticket.tipoCliente) ? ticket.tipoCliente : [ticket.tipoCliente];
-        
+
         const validObjectIds = rawIds
           .map((id: any) => {
             if (typeof id === 'string') return id;
@@ -390,7 +422,7 @@ async findAllPaginated(
         console.warn('⚠️ Error populando tipoCliente en findTicketById:', error);
       }
     }
-    
+
     if (Array.isArray(ticket.serviciosAfectados) && ticket.serviciosAfectados.length > 0) {
       try {
         // Extraer IDs tanto si son strings como si son objetos con _id
@@ -425,30 +457,30 @@ async findAllPaginated(
     };
   }
 
- async updateTicket(id: string, updateTicketDto: UpdateTicketDto, req?: Request): Promise<Ticket> {
-  let objectId: ObjectId;
-  try { objectId = new ObjectId(id); } catch { throw new BadRequestException('ID inválido'); }
+  async updateTicket(id: string, updateTicketDto: UpdateTicketDto, req?: Request): Promise<Ticket> {
+    let objectId: ObjectId;
+    try { objectId = new ObjectId(id); } catch { throw new BadRequestException('ID inválido'); }
 
-  const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
-  if (!oldTicket) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
+    const oldTicket = await this.ticketRepository.findOne({ _id: objectId } as any);
+    if (!oldTicket) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
 
-  const updateData = Object.fromEntries(
-    Object.entries(updateTicketDto).filter(([, value]) => value !== undefined)
-  );
+    const updateData = Object.fromEntries(
+      Object.entries(updateTicketDto).filter(([, value]) => value !== undefined)
+    );
 
-  // ✅ Normalizar tipoCliente a array
-  if (updateData.tipoCliente !== undefined) {
-    const incidentType = updateData.incidentType || oldTicket.incidentType;
-  updateData.tipoCliente = this.normalizeTipoCliente(updateData.tipoCliente as any, incidentType);
-}
+    // ✅ Normalizar tipoCliente a array
+    if (updateData.tipoCliente !== undefined) {
+      const incidentType = updateData.incidentType || oldTicket.incidentType;
+      updateData.tipoCliente = this.normalizeTipoCliente(updateData.tipoCliente as any, incidentType);
+    }
 
-  updateData.updatedAt = new Date();
+    updateData.updatedAt = new Date();
 
-  const result = await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
-  if (result.matchedCount === 0) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
+    const result = await this.ticketRepository.updateOne({ _id: objectId }, { $set: updateData });
+    if (result.matchedCount === 0) throw new NotFoundException(`Ticket con ID ${id} no encontrado`);
 
-  return this.findTicketById(id);
-}
+    return this.findTicketById(id);
+  }
 
 
   async closeTicket(id: string, updateDto?: any, req?: Request): Promise<Ticket> {
@@ -528,7 +560,7 @@ async findAllPaginated(
     return this.findTicketById(id);
   }
 
-  
+
   // ✅ CORREGIDO: También actualiza updatedAt al reabrir
   async reopenTicket(id: string, req?: Request): Promise<Ticket> {
     let objectId: ObjectId;
@@ -664,59 +696,59 @@ async findAllPaginated(
     } as any);
   }
 
- 
-async getLeastLoadedOperator(excludeUserId?: string) {
-  // 1. Obtener IDs de usuarios activos (online en los últimos 10 min)
-  const activeUserIds = await this.userSessionsService.getActiveUserIds();
 
-  // 2. Excluir al operador responsable de la lista de candidatos
-  const candidateUserIds = excludeUserId 
-    ? activeUserIds.filter(id => id !== String(excludeUserId))
-    : activeUserIds;
+  async getLeastLoadedOperator(excludeUserId?: string) {
+    // 1. Obtener IDs de usuarios activos (online en los últimos 10 min)
+    const activeUserIds = await this.userSessionsService.getActiveUserIds();
 
-  if (candidateUserIds.length === 0) {
-    this.logger.warn('⚠️ No hay otros operadores online disponibles para asignación (excluyendo al responsable)');
-    return null;
-  }
+    // 2. Excluir al operador responsable de la lista de candidatos
+    const candidateUserIds = excludeUserId
+      ? activeUserIds.filter(id => id !== String(excludeUserId))
+      : activeUserIds;
 
-  // 3. Contar tickets activos SOLO para los candidatos restantes
-  const counts = await this.ticketRepository.aggregate([
-    {
-      $match: {
-        status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } },
-        operatorAsignado: { $in: candidateUserIds }
-      }
-    },
-    { $group: { _id: '$operatorAsignado', activeTickets: { $sum: 1 } } }
-  ]).toArray();
-
-  // 4. Obtener datos de los usuarios candidatos
-  const allUsers = await this.usersService.findAll({ isActive: true });
-  const onlineOperators = allUsers.filter(u =>
-    candidateUserIds.includes(u._id.toString()) &&
-    (u.role === 'operador' || u.role === 'admin' || u.role === 'editor')
-  );
-
-  if (onlineOperators.length === 0) {
-    this.logger.warn('⚠️ No hay operadores online con roles válidos disponibles');
-    return null;
+    if (candidateUserIds.length === 0) {
+      this.logger.warn('⚠️ No hay otros operadores online disponibles para asignación (excluyendo al responsable)');
+      return null;
     }
 
-  // 5. Asignar la carga a cada operador online
-  const operatorsWithLoad = onlineOperators.map(op => {
-    const countData = counts.find(c => c._id === op._id.toString());
-    return {
-      user: op,
-      load: countData ? countData.activeTickets : 0
-    };
-  });
+    // 3. Contar tickets activos SOLO para los candidatos restantes
+    const counts = await this.ticketRepository.aggregate([
+      {
+        $match: {
+          status: { $not: { $regex: /cerrado|closed|resuelto|cancelado/i } },
+          operatorAsignado: { $in: candidateUserIds }
+        }
+      },
+      { $group: { _id: '$operatorAsignado', activeTickets: { $sum: 1 } } }
+    ]).toArray();
 
-  // 6. Ordenar por carga ascendente
-  operatorsWithLoad.sort((a, b) => a.load - b.load);
+    // 4. Obtener datos de los usuarios candidatos
+    const allUsers = await this.usersService.findAll({ isActive: true });
+    const onlineOperators = allUsers.filter(u =>
+      candidateUserIds.includes(u._id.toString()) &&
+      (u.role === 'operador' || u.role === 'admin' || u.role === 'editor')
+    );
 
-  const selected = operatorsWithLoad[0].user;
-  this.logger.log(`✅ Operador seleccionado: ${selected.email} con ${operatorsWithLoad[0].load} tickets activos`);
+    if (onlineOperators.length === 0) {
+      this.logger.warn('⚠️ No hay operadores online con roles válidos disponibles');
+      return null;
+    }
 
-  return selected;
-}
+    // 5. Asignar la carga a cada operador online
+    const operatorsWithLoad = onlineOperators.map(op => {
+      const countData = counts.find(c => c._id === op._id.toString());
+      return {
+        user: op,
+        load: countData ? countData.activeTickets : 0
+      };
+    });
+
+    // 6. Ordenar por carga ascendente
+    operatorsWithLoad.sort((a, b) => a.load - b.load);
+
+    const selected = operatorsWithLoad[0].user;
+    this.logger.log(`✅ Operador seleccionado: ${selected.email} con ${operatorsWithLoad[0].load} tickets activos`);
+
+    return selected;
+  }
 }
