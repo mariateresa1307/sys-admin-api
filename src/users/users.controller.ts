@@ -20,18 +20,22 @@ async findAll(
   @Query('limit') limit?: string,
   @Query('isActive') isActive?: string,
   @Query('search') search?: string,
+   @Query('role') role?: string,        // ✅ NUEVO
 ) {
   console.log('📥 [UsersController] Parámetros recibidos:', {
     page,
     limit,
     isActive,
-    search
+    search,
+    role
   });
+
 
   if (page !== undefined || limit !== undefined || search !== undefined) {
     const filters: any = {};
     if (isActive !== undefined) filters.isActive = isActive === 'true';
     if (search) filters.search = search;
+    if (role) filters.role = role;
 
     const result = await this.usersService.findAllPaginated(
       Number(page) || 1,

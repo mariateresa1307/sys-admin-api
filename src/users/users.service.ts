@@ -30,9 +30,13 @@ export class UsersService {
   }
 
   async findAll(userFileter: UserfilterDTO): Promise<User[]> {
-    const where: UserfilterDTO = {};
+    const filters = userFileter as UserfilterDTO & { role?: string };
+    const where: UserfilterDTO & { role?: string } = {};
     if (userFileter.isActive !== undefined) {
-      where.isActive = userFileter.isActive;
+      where.isActive = String(userFileter.isActive).toLowerCase() === 'true';
+    }
+    if (filters.role?.trim()) {
+      where.role = filters.role.trim();
     }
     return await this.userRepository.find({
       order: { primerNombre: 'ASC' },
@@ -45,17 +49,22 @@ export class UsersService {
 async findAllPaginated(
   page: number = 1,
   limit: number = 10,
-  filters: { isActive?: boolean; search?: string } = {}
+  filters: { isActive?: boolean; search?: string; role?: string } = {}
 ) {
   const take = limit > 0 ? limit : 10;
   const skip = page > 1 ? (page - 1) * take : 0;
 
   const where: any = {};
 
+
+  if (filters.role?.trim()) {
+  where.role = filters.role.trim();
+}
+
   // Filtro por estado
-  if (filters.isActive !== undefined) {
-    where.isActive = filters.isActive;
-  }
+if (filters.isActive !== undefined) {
+  where.isActive = String(filters.isActive).toLowerCase() === 'true';
+}
 
   // Filtro de búsqueda
   if (filters.search?.trim()) {
