@@ -61,13 +61,19 @@ export class NotificationsService {
       take: limit,
     });
   }
-
   async markAsRead(notificationId: string) {
-    return await this.notificationRepository.delete({ _id: notificationId } as any);
+    return await this.notificationRepository.update(
+      { _id: notificationId } as any,
+      { read: true } as any
+    );
   }
 
+  // ✅ CORREGIDO: Actualiza todos los del usuario en lugar de borrar
   async markAllAsRead(userId: string) {
-    return await this.notificationRepository.delete({ userId: String(userId) });
+    return await this.notificationRepository.update(
+      { userId: String(userId) } as any,
+      { read: true } as any
+    );
   }
 
   async countUnread(userId: string) {
@@ -155,31 +161,37 @@ async notifyLoginSummary(userId: string) {
   }
 
   @Cron('*/10 * * * *') // Cada 10 minutos
- async checkAndNotifyStaleTickets() {
-  this.logger.log('🔍 [CRON] Iniciando verificación de tickets...');
+  async checkAndNotifyStaleTickets() {
+    this.logger.log('🔍 [CRON] Iniciando verificación de tickets sin asignar...');
 
-  const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
-  
-  // 1️⃣ Obtener tickets sin asignar por 4 horas
-  const unassignedStaleTickets = await this.ticketsService.findUnassignedStaleTickets(fourHoursAgo);
-  
-  for (const ticket of unassignedStaleTickets) {
-    // ✅ PASAR EL RESPONSABLE PARA EXCLUIRLO
-    const assignedOperator = await this.ticketsService.getLeastLoadedOperator(ticket.operatorResponsable);
+    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
+    const unassignedStaleTickets = await this.ticketsService.findUnassignedStaleTickets(fourHoursAgo);
     
-    if (assignedOperator) {
-      await this.ticketsService.updateTicket(ticket._id.toString(), {
-        operatorAsignado: assignedOperator._id.toString(),
-      } as any);
-
-      // ... (aquí va tu lógica de notificación) ...
+    for (const ticket of unassignedStaleTickets) {
+      const assignedOperator = await this.ticketsService.getLeastLoadedOperator(ticket.operatorResponsable);
       
-      this.logger.log(`✅ Ticket ${ticket.caseNumber} asignado automáticamente a ${assignedOperator.email}`);
-    } else {
-      this.logger.warn(`⚠️ No se pudo asignar el ticket ${ticket.caseNumber}: No hay operadores disponibles distintos al responsable.`);
+      if (assignedOperator) {
+        // 1. Asignar el ticket
+        await this.ticketsService.updateTicket(ticket._id.toString(), {
+          operatorAsignado: assignedOperator._id.toString(),
+        } as any);
+
+        // 2. ✅ NUEVO: Crear la notificación para el operador asignado
+        await this.createNotification({
+          userId: assignedOperator._id.toString(),
+          title: '🔄 Ticket asignado automáticamente',
+          message: `Se te ha asignado el ticket ${ticket.caseNumber} por inactividad.`,
+          type: 'ticket_auto_assignment',
+          ticketId: ticket._id.toString(),
+          ticketNumber: ticket.caseNumber,
+        });
+        
+        this.logger.log(`✅ Ticket ${ticket.caseNumber} asignado y notificado a ${assignedOperator.email}`);
+      } else {
+        this.logger.warn(`⚠️ No se pudo asignar el ticket ${ticket.caseNumber}: No hay operadores disponibles.`);
+      }
     }
   }
-}
 
   private async assignTicketAutomatically(ticket: any): Promise<any> {
     return null;

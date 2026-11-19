@@ -15,21 +15,24 @@ export class UserSessionsService {
   ) {}
 
   async heartbeat(userId: string) {
-    const now = new Date();
-    const existing = await this.sessionRepository.findOne({ where: { userId } as any });
+ const existingSession = await this.sessionRepository.findOne({
+    where: { userId }
+  });
 
-    if (existing) {
-      existing.lastHeartbeat = now;
-      existing.isActive = true;
-      return this.sessionRepository.save(existing);
-    }
-
-    const session = this.sessionRepository.create({
+  if (existingSession) {
+    // Actualizar el registro existente
+    existingSession.lastHeartbeat = new Date();
+    existingSession.isActive = true;
+    await this.sessionRepository.save(existingSession);
+  } else {
+    // Crear nuevo registro solo si no existe
+    const newSession = this.sessionRepository.create({
       userId,
-      lastHeartbeat: now,
+      lastHeartbeat: new Date(),
       isActive: true,
     });
-    return this.sessionRepository.save(session);
+    await this.sessionRepository.save(newSession);
+  }
   }
 
   async getOnlineUsers() {
