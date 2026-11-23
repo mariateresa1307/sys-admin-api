@@ -26,6 +26,7 @@ export class NotificationsService {
     type: string;
     ticketId?: string;
     ticketNumber?: string;
+     ticketNumbers?: string[];
   }): Promise<Notification> {
     const notification = this.notificationRepository.create({
       ...data,
@@ -41,6 +42,7 @@ export class NotificationsService {
     type: string;
     ticketId?: string;
     ticketNumber?: string;
+     ticketNumbers?: string[];
   }): Promise<number> {
     const activeUserIds = await this.userSessionsService.getActiveUserIds();
     let notificationsCreated = 0;
@@ -116,18 +118,20 @@ async notifyLoginSummary(userId: string) {
     const staleTickets = await this.ticketsService.findDelayedTickets(twoHoursAgo);
 
     if (staleTickets.length > 0) {
-      // ✅ Extraer los números de caso de los tickets
-      const ticketNumbers = staleTickets.map(t => t.caseNumber).join(', ');
-      
+      const ticketNumbers = staleTickets.map(t => t.caseNumber);
+      const preview = ticketNumbers.slice(0, 3).join(', '); // ✅ Solo los primeros 3 en el mensaje
+      const suffix = ticketNumbers.length > 3 ? `... y ${ticketNumbers.length - 3} más` : '';
+
       await this.createNotification({
         userId,
-        title: `⚠️ ${staleTickets.length} ticket(s) sin actualización`,
-        message: `Al iniciar sesión, detectamos ${staleTickets.length} ticket(s) con más de 2 horas sin avances: ${ticketNumbers}`,
+        title: `⚠️ ${staleTickets.length} ticket(s) requieren revisión`,
+        message: `Al iniciar sesión, detectamos ${staleTickets.length} ticket(s) sin actualizar por más de 1 hora: ${preview}${suffix}`,
         type: 'login_stale_alert',
-        ticketNumber: staleTickets[0].caseNumber,
+        ticketNumbers,
+        // ticketNumber NO se envía aquí para evitar que el frontend abra un modal
       });
 
-      this.logger.log(`🔔 Notificación de ${staleTickets.length} tickets stale enviada al login: ${ticketNumbers}`);
+      this.logger.log(`🔔 Notificación de ${staleTickets.length} tickets stale enviada`);
     }
   } catch (error) {
     this.logger.error('Error creando notificación de login:', error);
@@ -184,6 +188,7 @@ async notifyLoginSummary(userId: string) {
           type: 'ticket_auto_assignment',
           ticketId: ticket._id.toString(),
           ticketNumber: ticket.caseNumber,
+          ticketNumbers: [ticket.caseNumber],
         });
         
         this.logger.log(`✅ Ticket ${ticket.caseNumber} asignado y notificado a ${assignedOperator.email}`);

@@ -22,7 +22,7 @@ export class Notification {
   ticketId?: string;
 
   @Column({ nullable: true })
-  ticketNumber?: string;
+ticketNumbers?: string[];
 
   @Column({ type: 'boolean', default: false })
   read?: boolean;

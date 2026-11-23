@@ -475,8 +475,9 @@ const recibidosNoche = todosLosTickets.filter(t => {
       // 2. Identificación de operadores
       const operadorIdsSet = new Set<string>();
       todosLosTickets.forEach(t => {
-        const rawOp = (t as any).operatorResponsable || (t as any).operador || (t as any).operatorAsignado;
-        if (rawOp) operadorIdsSet.add(String(rawOp).trim());
+        if (t.operatorResponsable) operadorIdsSet.add(String(t.operatorResponsable).trim());
+        if ((t as any).operador) operadorIdsSet.add(String((t as any).operador).trim()); // Fallback legacy
+        if (t.operatorAsignado) operadorIdsSet.add(String(t.operatorAsignado).trim());
       });
 
       const validObjectIds = Array.from(operadorIdsSet)
@@ -487,7 +488,7 @@ const recibidosNoche = todosLosTickets.filter(t => {
         ? await this.userRepository.find({ _id: { $in: validObjectIds } })
         : [];
 
-      const operadorMap = new Map<string, string>();
+       const operadorMap = new Map<string, string>();
       operadoresDB.forEach(u => {
         const userId = u._id?.toString();
         if (!userId) return;
@@ -497,44 +498,75 @@ const recibidosNoche = todosLosTickets.filter(t => {
         operadorMap.set(userId, nombreCompleto);
       });
 
-      // 3. Conteo por operador
-      const ticketsPorOperadorMap = new Map<string, { name: string; cantidad: number }>();
-      let sinOperadorCount = 0;
-      
-      todosLosTickets.forEach(t => {
-        const rawOp = (t as any).operatorResponsable || (t as any).operador || (t as any).operatorAsignado;
-        if (!rawOp) { sinOperadorCount++; return; }
 
-        const opStr = String(rawOp).trim();
-        if (!opStr || opStr === 'undefined' || opStr === 'null') { sinOperadorCount++; return; }
+           // 3. Conteo DESGLOSADO por operador
+      interface OperadorStats {
+        name: string;
+        cantidad: number;
+        total: number;
+        comoResponsable: number;
+        comoAsignado: number;
+      }
+      // 3. Conteo por operador
+         const ticketsPorOperadorMap = new Map<string, OperadorStats>();
+
+         const getOrCreateStats = (opId: string): OperadorStats | null => {
+        if (!opId || opId === 'undefined' || opId === 'null') return null;
         
-        let opName = operadorMap.get(opStr);
+        let opName = operadorMap.get(opId);
         if (!opName) {
-          opName = (!/^[0-9a-fA-F]{24}$/.test(opStr) && opStr.length > 3) ? opStr : `ID: ${opStr}`;
+          opName = (!/^[0-9a-fA-F]{24}$/.test(opId) && opId.length > 3) ? opId : `ID: ${opId}`;
         }
 
-        const current = ticketsPorOperadorMap.get(opName) || { name: opName, cantidad: 0 };
-        current.cantidad += 1;
-        ticketsPorOperadorMap.set(opName, current);
+        if (!ticketsPorOperadorMap.has(opName)) {
+          ticketsPorOperadorMap.set(opName, { name: opName, cantidad: 0, total: 0, comoResponsable: 0, comoAsignado: 0 });
+        }
+        return ticketsPorOperadorMap.get(opName)!;
+      };
+      
+      todosLosTickets.forEach(t => {
+        const respId = String((t as any).operatorResponsable || (t as any).operador || '').trim();
+        const asigId = String((t as any).operatorAsignado || '').trim();
+
+        // Si es responsable, suma a su total y a su columna de responsable
+        if (respId) {
+          const stats = getOrCreateStats(respId);
+          if (stats) {
+            stats.cantidad += 1;
+            stats.total += 1;
+            stats.comoResponsable += 1;
+          }
+        }
+
+        // Si está asignado (y es una persona distinta al responsable para no duplicar el total del mismo usuario en el mismo ticket)
+        if (asigId && asigId !== respId) {
+          const stats = getOrCreateStats(asigId);
+          if (stats) {
+            stats.cantidad += 1;
+            stats.total += 1;
+            stats.comoAsignado += 1;
+          }
+        }
       });
 
-      const ticketsPorOperador = Array.from(ticketsPorOperadorMap.values()).sort((a, b) => b.cantidad - a.cantidad);
+      // Ordenar por total de tickets descendente
+      const ticketsPorOperador = Array.from(ticketsPorOperadorMap.values()).sort((a, b) => b.total - a.total); 
       const operadoresUnicos = ticketsPorOperador.length || 1;
       const promedioPorOperador = todosLosTickets.length > 0 ? Math.round((todosLosTickets.length / operadoresUnicos) * 100) / 100 : 0;
 
-      // 4. ✅ CÁLCULO DE TOTALES Y POR TURNO (NUEVO)
+      // 4.  CÁLCULO DE TOTALES Y POR TURNO (NUEVO)
       const totalTicketsCerrados = todosLosTickets.filter(t => t.status === TICKET_STATUS.CERRADO).length;
       const totalTicketsActivos = todosLosTickets.filter(t => t.status !== TICKET_STATUS.CERRADO).length;
       const totalTicketsGeneral = todosLosTickets.length;
 
       const ticketsDia = todosLosTickets.filter(t => {
         const fecha = new Date((t as any).horaDeteccionNoc || t.createdAt);
-        return this.esTurnoDiurno(fecha); // 7am - 7pm
+        return this.esTurnoDiurno(fecha);
       }).length;
 
       const ticketsNoche = todosLosTickets.filter(t => {
         const fecha = new Date((t as any).horaDeteccionNoc || t.createdAt);
-        return !this.esTurnoDiurno(fecha); // 7pm - 7am
+        return !this.esTurnoDiurno(fecha);
       }).length;
 
       console.log('📊 [GrupoC] Desglose verificado:', { 
@@ -548,10 +580,12 @@ const recibidosNoche = todosLosTickets.filter(t => {
       });
 
       // 5. Detalle para exportación
-      const ticketsDetalle = todosLosTickets.map(t => {
-        const rawOp = (t as any).operatorResponsable || (t as any).operador || (t as any).operatorAsignado;
-        const opStr = String(rawOp || '').trim();
-        const opName = operadorMap.get(opStr) || (opStr.length > 3 && !/^[0-9a-fA-F]{24}$/.test(opStr) ? opStr : `ID: ${opStr || 'N/A'}`);
+       const ticketsDetalle = todosLosTickets.map(t => {
+        const respId = String((t as any).operatorResponsable || (t as any).operador || '').trim();
+        const asigId = String((t as any).operatorAsignado || '').trim();
+        
+        const opRespName = operadorMap.get(respId) || (respId.length > 3 && !/^[0-9a-fA-F]{24}$/.test(respId) ? respId : (respId ? `ID: ${respId}` : 'N/A'));
+        const opAsigName = operadorMap.get(asigId) || (asigId.length > 3 && !/^[0-9a-fA-F]{24}$/.test(asigId) ? asigId : (asigId ? `ID: ${asigId}` : 'N/A'));
         
         const fechaCierre = new Date((t as any).closedAt || t.updatedAt || t.createdAt);
         const turno = this.esTurnoDiurno(fechaCierre) ? 'Diurno (7am-7pm)' : 'Nocturno (7pm-7am)';
@@ -564,38 +598,22 @@ const recibidosNoche = todosLosTickets.filter(t => {
           networkCategory: t.networkCategory || '',
           tipoCliente: t.tipoCliente || '',
           status: t.status || 'N/A',
-          afectacion: t.afectacion,
           horaInicioFalla: (t as any).horaInicioFalla || t.createdAt,
           horaCierre: (t as any).horaCierreFalla || (t as any).closedAt || t.updatedAt,
           duracion: t.mttrTotal ? `${horas}h ${mins}m` : '0h 0m',
-          causaRaiz: (t as any).causaRaiz || '',
-          operadorResponsable: opName,
+          operadorResponsable: opRespName,
+          operadorAsignado: opAsigName, 
           turno: turno,
         };
       });
 
-return {
+ return {
         cards: [
-          { 
-            title: 'Tasa rotación diurna', 
-            value: `${tasaRotacionDiurna}%`, 
-            subtitle: `Turno 7am-7pm (total ${recibidosDia.length} tickets)`, // ✅ FORMATO SOLICITADO
-            color: '#42f5a8' 
-          },
-          { 
-            title: 'Tasa rotación nocturna', 
-            value: `${tasaRotacionNocturna}%`, 
-            subtitle: `Turno 7pm-7am (total ${recibidosNoche.length} tickets)`, // ✅ FORMATO SOLICITADO
-            color: '#4287f5' 
-          },
-          { 
-            title: 'Eficiencia de cierre', 
-            value: `${eficienciaCierre}%`, 
-            subtitle: `Total (${totalCerradosTurno} de ${totalRecibidosTurno} tickets)`,
-            color: '#42f5d4' 
-          },
+          { title: 'Tasa rotación diurna', value: `${tasaRotacionDiurna}%`, subtitle: `Turno 7am-7pm (total ${recibidosDia.length} tickets)`, color: '#42f5a8' },
+          { title: 'Tasa rotación nocturna', value: `${tasaRotacionNocturna}%`, subtitle: `Turno 7pm-7am (total ${recibidosNoche.length} tickets)`, color: '#4287f5' },
+          { title: 'Eficiencia de cierre', value: `${eficienciaCierre}%`, subtitle: `Total (${totalCerradosTurno} de ${totalRecibidosTurno} tickets)`, color: '#42f5d4' },
         ],
-        ticketsPorOperador,
+        ticketsPorOperador, // ✅ Ahora contiene { name, total, comoResponsable, comoAsignado }
         promedioPorOperador,
         cantidadOperadores: operadoresUnicos,
         ticketsDetalle,
@@ -609,7 +627,7 @@ return {
         cerradosDia: cerradosDia.length,
         cerradosNoche: cerradosNoche.length,
       };
-    } catch (error) {
+        } catch (error) {
       console.error('❌ [GrupoC] ERROR CRÍTICO:', error);
       throw error;
     }
