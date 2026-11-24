@@ -19,11 +19,12 @@ export class ServiceController {
     @Query('status') status?: string,
     @Query('tipoCliente') tipoCliente?: string,
     @Query('vlan') vlan?: number,
-    @Query('nodos') nodos?: string
+    @Query('nodos') nodos?: string, 
+    @Query('serialONT') serialONT?: string, 
   ) {
 
-    console.log(' [ServiceController] Parámetros recibidos:', {
-      page, limit, search, tipoServicio, excludeTipo, status, tipoCliente, vlan, nodos
+    console.log('📥 [ServiceController] Parámetros recibidos:', {
+      page, limit, search, tipoServicio, excludeTipo, status, tipoCliente, vlan, nodos, serialONT
     });
     const result = await this.serviceService.findAllPaginated(
       Number(page),
@@ -35,6 +36,7 @@ export class ServiceController {
       tipoCliente,
       vlan,
       nodos,
+      serialONT 
     );
 
 
